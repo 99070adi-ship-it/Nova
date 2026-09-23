@@ -5,8 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import AuthContext, require_any_role
 from app.db.session import get_db
-from app.schemas.product import ProductCreate, ProductOut, ProductUpdate
-from app.services import product_service
+from app.schemas.product import GenerateLifestyleImage, ProductCreate, ProductImageOut, ProductOut, ProductUpdate
+from app.services import image_service, product_service
 
 router = APIRouter()
 
@@ -42,3 +42,20 @@ async def update_product(
 ) -> ProductOut:
     product = await product_service.update_product(db, ctx.org_id, product_id, payload)
     return ProductOut.model_validate(product)
+
+
+@router.get("/{product_id}/images", response_model=list[ProductImageOut])
+async def list_images(
+    product_id: uuid.UUID, ctx: AuthContext = Depends(require_any_role), db: AsyncSession = Depends(get_db)
+) -> list[ProductImageOut]:
+    images = await image_service.list_images(db, ctx.org_id, product_id)
+    return [ProductImageOut.model_validate(i) for i in images]
+
+
+@router.post("/{product_id}/images/generate", response_model=ProductImageOut, status_code=201)
+async def generate_lifestyle_image(
+    product_id: uuid.UUID, payload: GenerateLifestyleImage, ctx: AuthContext = Depends(require_any_role),
+    db: AsyncSession = Depends(get_db),
+) -> ProductImageOut:
+    image = await image_service.generate_lifestyle_image(db, ctx.org_id, product_id, environment=payload.environment, mood=payload.mood)
+    return ProductImageOut.model_validate(image)

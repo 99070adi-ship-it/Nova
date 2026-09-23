@@ -5,6 +5,7 @@ import {
   ApiError,
   acceptProductDraft,
   createProductDraft,
+  generateProductDraftContent,
   getCurrentStoreCreation,
   listProductDrafts,
   rejectProductDraft,
@@ -152,6 +153,7 @@ function ProductDraftsPanel() {
 
   const acceptMutation = useMutation({ mutationFn: acceptProductDraft, onSuccess: invalidate });
   const rejectMutation = useMutation({ mutationFn: rejectProductDraft, onSuccess: invalidate });
+  const generateMutation = useMutation({ mutationFn: generateProductDraftContent, onSuccess: invalidate });
 
   return (
     <div className="space-y-4">
@@ -161,6 +163,8 @@ function ProductDraftsPanel() {
         {isLoading && <p className="text-sm text-neutral-400">Loading…</p>}
         {drafts?.map((d) => {
           const canAccept = d.status === "owner_reviewing" || d.status === "generated";
+          const canGenerate = d.status === "pending_generation" || d.status === "owner_reviewing";
+          const description = d.fields.description as string | undefined;
           return (
             <div key={d.id} className="rounded-lg border border-neutral-200 bg-white p-4">
               <div className="flex items-start justify-between">
@@ -173,24 +177,36 @@ function ProductDraftsPanel() {
                       </span>
                     ))}
                   </div>
+                  {description && <p className="mt-2 max-w-lg text-xs text-neutral-600">{description}</p>}
                   <p className="mt-1 text-xs text-neutral-400">status: {d.status}</p>
                 </div>
-                {canAccept && (
-                  <div className="flex gap-2">
+                <div className="flex gap-2">
+                  {canGenerate && (
                     <button
-                      onClick={() => acceptMutation.mutate(d.id)}
-                      className="rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white"
+                      onClick={() => generateMutation.mutate(d.id)}
+                      disabled={generateMutation.isPending}
+                      className="rounded-md border border-neutral-300 px-3 py-1 text-xs font-medium hover:bg-neutral-100"
                     >
-                      Accept
+                      {generateMutation.isPending && generateMutation.variables === d.id ? "Generating…" : "Generate content"}
                     </button>
-                    <button
-                      onClick={() => rejectMutation.mutate(d.id)}
-                      className="rounded-md border border-neutral-300 px-3 py-1 text-xs"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                )}
+                  )}
+                  {canAccept && (
+                    <>
+                      <button
+                        onClick={() => acceptMutation.mutate(d.id)}
+                        className="rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white"
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => rejectMutation.mutate(d.id)}
+                        className="rounded-md border border-neutral-300 px-3 py-1 text-xs"
+                      >
+                        Reject
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
               {acceptMutation.isError && acceptMutation.variables === d.id && (
                 <p className="mt-2 text-xs text-red-600">

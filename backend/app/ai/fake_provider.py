@@ -3,6 +3,7 @@ permission checks, loop caps, the approval gate) testable without ever calling a
 the default AI_PROVIDER so the demo never depends on a live API key."""
 
 import hashlib
+import json
 
 from app.ai.provider import (
     GeneratedImage,
@@ -42,6 +43,12 @@ class FakeLLMProvider(LLMProvider):
             summary = "; ".join(f"{r.name} -> {r.content}" for r in tool_results)
             return ProviderStepResult(final=ProviderFinal(text=f"Based on {summary}."))
 
+        # No tools offered at all + a "known_fields" context shape ⇒ a structured content-
+        # generation call (e.g. the Product Agent), not a conversational turn. Synthesize
+        # deterministic JSON from what's actually in context rather than inventing facts.
+        if not available_tools and "known_fields" in context:
+            return ProviderStepResult(final=ProviderFinal(text=json.dumps(_synthesize_product_content(context))))
+
         # No tool results yet — call the first read-only tool this agent has access to, if any,
         # so an unscripted run still exercises a real tool round trip (call -> execution -> result
         # fed back -> final answer) rather than just echoing text. Not "smart" — a deterministic
@@ -79,6 +86,33 @@ def _deterministic_pseudo_embedding(text: str, dimensions: int = 1536) -> list[f
         sign = 1.0 if digest[4] % 2 == 0 else -1.0
         vector[index] += sign
     return vector
+
+
+def _synthesize_product_content(context: dict) -> dict:
+    """Deterministic stand-in for the Product Agent's content generation — builds plausible
+    description/category/tags/SEO text from the title and brand vibe alone, never inventing a
+    physical spec that wasn't supplied (ARCHITECTURE.md "Product ingestion & AI product content
+    workflow")."""
+
+    known = context.get("known_fields", {})
+    brand = context.get("brand", {})
+    title = known.get("title") or "New Product"
+    category = known.get("category")
+    vibe = (brand.get("vibe_text") or "quality craftsmanship").strip()
+    target = brand.get("target_customer") or "our customers"
+    brand_name = brand.get("name") or "the shop"
+
+    description = f"{title} — designed with {vibe.lower()} for {target}."
+    vibe_tag = vibe.split(",")[0].strip().lower() if vibe else None
+    tags = [t for t in [category, vibe_tag] if t] or ["new"]
+
+    return {
+        "description": description,
+        "category": category or "General",
+        "tags": tags,
+        "seo_title": f"{title} | {brand_name}",
+        "seo_description": description[:160],
+    }
 
 
 def scripted_tool_call(name: str, arguments: dict, call_id: str = "call_1") -> ProviderStepResult:

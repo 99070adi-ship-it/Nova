@@ -92,7 +92,8 @@ async def accept_product_draft(db: AsyncSession, org_id: uuid.UUID, draft_id: uu
     product = await product_repo.create_product(
         db, org_id,
         title=title, slug=_slugify(title), category=draft.fields.get("category"), tags=draft.fields.get("tags"),
-        description=draft.fields.get("description"), seo_title=None, seo_description=None,
+        description=draft.fields.get("description"), seo_title=draft.fields.get("seo_title"),
+        seo_description=draft.fields.get("seo_description"),
         variants=[{"sku": sku, "price": price, "cost": None, "attributes": None}],
     )
     location = await inventory_repo.get_or_create_default_location(db, org_id)
@@ -100,6 +101,11 @@ async def accept_product_draft(db: AsyncSession, org_id: uuid.UUID, draft_id: uu
         await inventory_repo.create_inventory_row(
             db, variant_id=variant.id, location_id=location.id, on_hand=0, low_stock_threshold=5
         )
+    if draft.source_image_refs:
+        # The first supplied photo becomes the canonical image — immutable with respect to AI
+        # generation from here on; only an explicit owner upload can ever replace it
+        # (ARCHITECTURE.md "AI image system").
+        await product_repo.create_canonical_image(db, product.id, url=draft.source_image_refs[0])
     draft.status = ProductDraftStatus.accepted
     draft.accepted_product_id = product.id
     await db.commit()

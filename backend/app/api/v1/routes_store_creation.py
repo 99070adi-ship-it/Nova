@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import AuthContext, require_owner
 from app.db.session import get_db
 from app.schemas.store_creation import BrandInput, ProductDraftInput, ProductDraftOut, SessionOut
-from app.services import store_creation_service
+from app.services import product_agent_service, store_creation_service
 
 router = APIRouter()
 
@@ -44,6 +44,14 @@ async def create_product_draft(
     payload: ProductDraftInput, ctx: AuthContext = Depends(require_owner), db: AsyncSession = Depends(get_db)
 ) -> ProductDraftOut:
     draft = await store_creation_service.create_product_draft(db, ctx.org_id, payload)
+    return ProductDraftOut.model_validate(draft)
+
+
+@router.post("/product-drafts/{draft_id}/generate", response_model=ProductDraftOut)
+async def generate_product_draft_content(
+    draft_id: uuid.UUID, ctx: AuthContext = Depends(require_owner), db: AsyncSession = Depends(get_db)
+) -> ProductDraftOut:
+    draft = await product_agent_service.generate_draft_content(db, ctx.org_id, draft_id)
     return ProductDraftOut.model_validate(draft)
 
 

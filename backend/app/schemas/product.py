@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.db.models import ProductStatus
+from app.db.models import ProductImageRole, ProductStatus
 
 
 class VariantIn(BaseModel):
@@ -42,6 +42,26 @@ class ProductUpdate(BaseModel):
     description: str | None = None
     seo_title: str | None = None
     seo_description: str | None = None
+
+
+class GenerateLifestyleImage(BaseModel):
+    environment: str | None = Field(default=None, max_length=100)
+    mood: str | None = Field(default=None, max_length=100)
+
+
+class ProductImageOut(BaseModel):
+    id: uuid.UUID
+    url: str
+    role: ProductImageRole
+    is_ai_generated: bool
+    provider: str | None
+    model: str | None
+    environment: str | None
+    mood: str | None
+    source_image_id: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class ProductOut(BaseModel):

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { ApiError, createProduct, listProducts } from "../api/client";
+import ProductImagesPanel from "../components/ProductImagesPanel";
 
 export default function ProductsPage() {
   const queryClient = useQueryClient();
@@ -10,6 +11,7 @@ export default function ProductsPage() {
   const [price, setPrice] = useState("");
   const [sku, setSku] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -73,27 +75,45 @@ export default function ProductsPage() {
               <th className="px-4 py-2">Status</th>
               <th className="px-4 py-2">SKU</th>
               <th className="px-4 py-2">Price</th>
+              <th className="px-4 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
               <tr>
-                <td className="px-4 py-3 text-neutral-400" colSpan={4}>
+                <td className="px-4 py-3 text-neutral-400" colSpan={5}>
                   Loading…
                 </td>
               </tr>
             )}
             {products?.map((p) => (
-              <tr key={p.id} className="border-b border-neutral-100 last:border-0">
-                <td className="px-4 py-2 font-medium">{p.title}</td>
-                <td className="px-4 py-2 text-neutral-500">{p.status}</td>
-                <td className="px-4 py-2 text-neutral-500">{p.variants[0]?.sku}</td>
-                <td className="px-4 py-2 text-neutral-500">${p.variants[0]?.price.toFixed(2)}</td>
-              </tr>
+              <Fragment key={p.id}>
+                <tr className="border-b border-neutral-100 last:border-0">
+                  <td className="px-4 py-2 font-medium">{p.title}</td>
+                  <td className="px-4 py-2 text-neutral-500">{p.status}</td>
+                  <td className="px-4 py-2 text-neutral-500">{p.variants[0]?.sku}</td>
+                  <td className="px-4 py-2 text-neutral-500">${p.variants[0]?.price.toFixed(2)}</td>
+                  <td className="px-4 py-2 text-right">
+                    <button
+                      onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}
+                      className="text-xs text-neutral-500 hover:underline"
+                    >
+                      {expandedId === p.id ? "Hide images" : "Images"}
+                    </button>
+                  </td>
+                </tr>
+                {expandedId === p.id && (
+                  <tr>
+                    <td colSpan={5} className="p-0">
+                      <ProductImagesPanel productId={p.id} />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
             {products?.length === 0 && (
               <tr>
-                <td className="px-4 py-3 text-neutral-400" colSpan={4}>
+                <td className="px-4 py-3 text-neutral-400" colSpan={5}>
                   No products yet.
                 </td>
               </tr>

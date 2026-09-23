@@ -27,7 +27,12 @@ class SessionOut(BaseModel):
     model_config = {"from_attributes": True, "populate_by_name": True}
 
 
-PRODUCT_DRAFT_FIELD_NAMES = ["title", "description", "price", "sku", "category", "tags"]
+PRODUCT_DRAFT_FIELD_NAMES = ["title", "description", "price", "sku", "category", "tags", "seo_title", "seo_description"]
+
+# Fields the Product Agent is allowed to fill in with "suggested" content — never price/sku,
+# which are structural data, not content the model can plausibly propose (ARCHITECTURE.md
+# "Product ingestion & AI product content workflow").
+PRODUCT_AGENT_GENERATABLE_FIELDS = ["description", "category", "tags", "seo_title", "seo_description"]
 
 
 class ProductDraftInput(BaseModel):
@@ -37,6 +42,8 @@ class ProductDraftInput(BaseModel):
     sku: str | None = None
     category: str | None = None
     tags: list[str] | None = None
+    seo_title: str | None = None
+    seo_description: str | None = None
     source_image_refs: list[str] | None = None
 
 

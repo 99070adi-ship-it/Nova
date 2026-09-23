@@ -109,6 +109,27 @@ export async function createProduct(input: {
   return apiFetch<Product>("/products", { method: "POST", body: JSON.stringify(input) });
 }
 
+export interface ProductImage {
+  id: string;
+  url: string;
+  role: "canonical" | "generated";
+  is_ai_generated: boolean;
+  provider: string | null;
+  model: string | null;
+  environment: string | null;
+  mood: string | null;
+  source_image_id: string | null;
+  created_at: string;
+}
+
+export async function listProductImages(productId: string) {
+  return apiFetch<ProductImage[]>(`/products/${productId}/images`);
+}
+
+export async function generateLifestyleImage(productId: string, input: { environment?: string; mood?: string }) {
+  return apiFetch<ProductImage>(`/products/${productId}/images/generate`, { method: "POST", body: JSON.stringify(input) });
+}
+
 // ---- Collections ----
 
 export interface Collection {
@@ -284,6 +305,10 @@ export async function createProductDraft(input: {
   source_image_refs?: string[] | null;
 }) {
   return apiFetch<ProductDraft>("/store-creation/product-drafts", { method: "POST", body: JSON.stringify(input) });
+}
+
+export async function generateProductDraftContent(draftId: string) {
+  return apiFetch<ProductDraft>(`/store-creation/product-drafts/${draftId}/generate`, { method: "POST" });
 }
 
 export async function acceptProductDraft(draftId: string) {

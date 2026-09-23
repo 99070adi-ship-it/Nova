@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import Product, ProductStatus, ProductVariant
+from app.db.models import Product, ProductImage, ProductImageRole, ProductStatus, ProductVariant
 
 
 async def list_products(db: AsyncSession, org_id: uuid.UUID) -> list[Product]:
@@ -67,3 +67,35 @@ async def update_product(db: AsyncSession, org_id: uuid.UUID, product_id: uuid.U
             setattr(product, key, value)
     await db.flush()
     return product
+
+
+async def create_canonical_image(db: AsyncSession, product_id: uuid.UUID, *, url: str) -> ProductImage:
+    image = ProductImage(product_id=product_id, url=url, role=ProductImageRole.canonical, is_ai_generated=False)
+    db.add(image)
+    await db.flush()
+    return image
+
+
+async def get_canonical_image(db: AsyncSession, product_id: uuid.UUID) -> ProductImage | None:
+    result = await db.execute(
+        select(ProductImage).where(ProductImage.product_id == product_id, ProductImage.role == ProductImageRole.canonical)
+    )
+    return result.scalars().first()
+
+
+async def list_images(db: AsyncSession, product_id: uuid.UUID) -> list[ProductImage]:
+    result = await db.execute(select(ProductImage).where(ProductImage.product_id == product_id).order_by(ProductImage.created_at.asc()))
+    return list(result.scalars().all())
+
+
+async def create_generated_image(
+    db: AsyncSession, product_id: uuid.UUID, *, url: str, provider: str, model: str, prompt_metadata: dict,
+    environment: str | None, mood: str | None, source_image_id: uuid.UUID,
+) -> ProductImage:
+    image = ProductImage(
+        product_id=product_id, url=url, role=ProductImageRole.generated, is_ai_generated=True, provider=provider,
+        model=model, prompt_metadata=prompt_metadata, environment=environment, mood=mood, source_image_id=source_image_id,
+    )
+    db.add(image)
+    await db.flush()
+    return image
