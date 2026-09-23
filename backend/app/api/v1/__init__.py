@@ -7,7 +7,9 @@ from app.api.v1.routes_inventory import router as inventory_router
 from app.api.v1.routes_orders import router as orders_router
 from app.api.v1.routes_products import router as products_router
 from app.api.v1.routes_promotions import router as promotions_router
+from app.api.v1.routes_public import router as public_router
 from app.api.v1.routes_store_creation import router as store_creation_router
+from app.api.v1.routes_storefront import router as storefront_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
@@ -18,3 +20,6 @@ api_router.include_router(customers_router, prefix="/customers", tags=["customer
 api_router.include_router(orders_router, prefix="/orders", tags=["orders"])
 api_router.include_router(promotions_router, prefix="/promotions", tags=["promotions"])
 api_router.include_router(store_creation_router, prefix="/store-creation", tags=["store-creation"])
+api_router.include_router(storefront_router, prefix="/storefront", tags=["storefront"])
+# Unauthenticated — consumed by the separate storefront/ app (anonymous browsing).
+api_router.include_router(public_router, prefix="/public", tags=["public"])

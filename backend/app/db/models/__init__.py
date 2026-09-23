@@ -15,6 +15,7 @@ from app.db.models.product import (
 from app.db.models.promotion import Promotion
 from app.db.models.store import BrandProfile, Store
 from app.db.models.store_creation import StoreCreationSession, StoreCreationStatus
+from app.db.models.storefront import GeneratedBy, StorePage, StoreSection, StorefrontVersion, StorefrontVersionStatus, StoreTheme
 from app.db.models.user import RefreshToken, User, UserRole
 
 __all__ = [
@@ -25,6 +26,7 @@ __all__ = [
     "CollectionProduct",
     "CollectionProductCreatedBy",
     "Customer",
+    "GeneratedBy",
     "Inventory",
     "InventoryLocation",
     "InventoryMovement",
@@ -45,6 +47,11 @@ __all__ = [
     "Store",
     "StoreCreationSession",
     "StoreCreationStatus",
+    "StorePage",
+    "StoreSection",
+    "StoreTheme",
+    "StorefrontVersion",
+    "StorefrontVersionStatus",
     "User",
     "UserRole",
 ]

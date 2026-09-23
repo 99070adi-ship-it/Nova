@@ -39,6 +39,25 @@ async def create_product(
     return await get_product(db, org_id, product.id)  # reload with variants relationship populated
 
 
+async def list_published_products(db: AsyncSession, org_id: uuid.UUID) -> list[Product]:
+    result = await db.execute(
+        select(Product)
+        .where(Product.org_id == org_id, Product.status == ProductStatus.published)
+        .options(selectinload(Product.variants))
+        .order_by(Product.created_at.desc())
+    )
+    return list(result.scalars().unique().all())
+
+
+async def get_published_product_by_slug(db: AsyncSession, org_id: uuid.UUID, slug: str) -> Product | None:
+    result = await db.execute(
+        select(Product)
+        .where(Product.org_id == org_id, Product.slug == slug, Product.status == ProductStatus.published)
+        .options(selectinload(Product.variants))
+    )
+    return result.scalar_one_or_none()
+
+
 async def update_product(db: AsyncSession, org_id: uuid.UUID, product_id: uuid.UUID, **fields) -> Product | None:
     product = await get_product(db, org_id, product_id)
     if product is None:

@@ -28,7 +28,8 @@ async def client():
 @pytest.fixture
 async def seeded_owner():
     async with AsyncSessionLocal() as db:
-        org = Organization(name="Test Org", slug=f"test-org-{uuid.uuid4().hex[:8]}")
+        org_slug = f"test-org-{uuid.uuid4().hex[:8]}"
+        org = Organization(name="Test Org", slug=org_slug)
         db.add(org)
         await db.flush()
         user = User(
@@ -40,4 +41,6 @@ async def seeded_owner():
         )
         db.add(user)
         await db.commit()
-        return {"org_id": org.id, "user_id": user.id, "email": user.email, "password": "changeme123"}
+        return {
+            "org_id": org.id, "org_slug": org_slug, "user_id": user.id, "email": user.email, "password": "changeme123",
+        }
