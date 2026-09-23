@@ -44,6 +44,21 @@ class PublishStorefrontArgs(BaseModel):
     pass
 
 
+class DraftCampaignArgs(BaseModel):
+    goal: str = Field(min_length=1, max_length=300)
+    target_segment: str = Field(min_length=1, max_length=200)
+    campaign_copy: str = Field(min_length=1, max_length=2000)
+
+
+class CancelOrderArgs(BaseModel):
+    order_id: str
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class GetOrderDetailsArgs(BaseModel):
+    order_id: str
+
+
 @dataclass(frozen=True)
 class ToolSpec:
     name: str
@@ -104,6 +119,27 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
         args_model=PublishStorefrontArgs,
         is_mutating=True,
         risk_classification="high",
+    ),
+    "draft_campaign": ToolSpec(
+        name="draft_campaign",
+        description="Propose a marketing campaign draft (goal, target segment, copy). Never sends anything — drafting only.",
+        args_model=DraftCampaignArgs,
+        is_mutating=True,
+        risk_classification="high",
+    ),
+    "cancel_order": ToolSpec(
+        name="cancel_order",
+        description="Propose cancelling an order.",
+        args_model=CancelOrderArgs,
+        is_mutating=True,
+        risk_classification="high",
+    ),
+    "get_order_details": ToolSpec(
+        name="get_order_details",
+        description="Look up an order's status, payment status, and items by id.",
+        args_model=GetOrderDetailsArgs,
+        is_mutating=False,
+        risk_classification=None,
     ),
 }
 

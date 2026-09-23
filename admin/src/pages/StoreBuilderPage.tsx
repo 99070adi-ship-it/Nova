@@ -2,11 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   ApiError,
+  ChangePlan,
   StoreSection,
   addSection,
+  applyChangePlan,
   deleteSection,
   getStorefrontDiff,
   getStorefrontDraft,
+  proposeChangePlan,
   publishStorefront,
   updateSection,
   updateTheme,
@@ -85,6 +88,83 @@ function SectionEditor({ section, pageId }: { section: StoreSection; pageId: str
       >
         Save section
       </button>
+    </div>
+  );
+}
+
+function AskNovaPanel() {
+  const queryClient = useQueryClient();
+  const [instruction, setInstruction] = useState("");
+  const [plan, setPlan] = useState<ChangePlan | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["storefront-draft"] });
+    queryClient.invalidateQueries({ queryKey: ["storefront-diff"] });
+  };
+
+  const proposeMutation = useMutation({
+    mutationFn: () => proposeChangePlan(instruction),
+    onSuccess: (result) => {
+      setPlan(result);
+      setError(null);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : "Failed to propose changes"),
+  });
+
+  const applyMutation = useMutation({
+    mutationFn: () => applyChangePlan(plan!.agent_run_id),
+    onSuccess: () => {
+      invalidate();
+      setPlan((p) => (p ? { ...p, applied: true } : p));
+    },
+  });
+
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-white p-4">
+      <h2 className="text-sm font-semibold">Ask NOVA</h2>
+      <p className="mt-1 text-xs text-neutral-500">Describe a change — NOVA proposes a plan before touching anything.</p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (instruction.trim()) proposeMutation.mutate();
+        }}
+        className="mt-3 flex gap-2"
+      >
+        <input
+          value={instruction}
+          onChange={(e) => setInstruction(e.target.value)}
+          placeholder="e.g. make it feel more premium"
+          className="flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
+        />
+        <button type="submit" disabled={proposeMutation.isPending} className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100">
+          {proposeMutation.isPending ? "Thinking…" : "Propose"}
+        </button>
+      </form>
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+
+      {plan && (
+        <div className="mt-3 rounded-md border border-neutral-200 bg-neutral-50 p-3">
+          <p className="text-xs font-medium text-neutral-500">Change plan</p>
+          <ul className="mt-1 space-y-1">
+            {plan.plan.map((item, i) => (
+              <li key={i} className="text-xs text-neutral-700">
+                • {item.description}
+              </li>
+            ))}
+          </ul>
+          {!plan.applied && plan.plan.some((i) => i.action !== "none") && (
+            <button
+              onClick={() => applyMutation.mutate()}
+              disabled={applyMutation.isPending}
+              className="mt-3 rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white"
+            >
+              {applyMutation.isPending ? "Applying…" : "Apply changes"}
+            </button>
+          )}
+          {plan.applied && <p className="mt-2 text-xs text-emerald-600">Applied to draft.</p>}
+        </div>
+      )}
     </div>
   );
 }
@@ -169,6 +249,8 @@ export default function StoreBuilderPage() {
       </div>
 
       <div className="space-y-4">
+        <AskNovaPanel />
+
         <div className="rounded-lg border border-neutral-200 bg-white p-4">
           <h2 className="text-sm font-semibold">Theme</h2>
           <div className="mt-3 space-y-2">

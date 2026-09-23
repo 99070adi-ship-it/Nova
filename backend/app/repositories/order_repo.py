@@ -43,3 +43,12 @@ async def create_order(db: AsyncSession, org_id: uuid.UUID, *, customer_id: uuid
         db.add(OrderItem(order_id=order.id, variant_id=item["variant_id"], quantity=item["quantity"], unit_price=item["unit_price"]))
     await db.flush()
     return await get_order(db, org_id, order.id)
+
+
+async def set_status(db: AsyncSession, org_id: uuid.UUID, order_id: uuid.UUID, *, status: OrderStatus) -> Order | None:
+    order = await get_order(db, org_id, order_id)
+    if order is None:
+        return None
+    order.status = status
+    await db.flush()
+    return order

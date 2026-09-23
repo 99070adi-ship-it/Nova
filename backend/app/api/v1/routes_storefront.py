@@ -5,8 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import AuthContext, require_any_role
 from app.db.session import get_db
-from app.schemas.storefront import DiffOut, SectionCreate, SectionUpdate, StorefrontVersionOut, ThemeUpdate
-from app.services import storefront_service
+from app.schemas.storefront import ChangePlanOut, ChangePlanRequest, DiffOut, SectionCreate, SectionUpdate, StorefrontVersionOut, ThemeUpdate
+from app.services import storefront_agent_service, storefront_service
 
 router = APIRouter()
 
@@ -71,4 +71,20 @@ async def update_theme(
 ) -> StorefrontVersionOut:
     tokens = {k: v for k, v in payload.model_dump().items() if v is not None}
     draft = await storefront_service.update_theme(db, ctx.org_id, tokens)
+    return StorefrontVersionOut.from_version(draft)
+
+
+@router.post("/change-plan", response_model=ChangePlanOut, status_code=201)
+async def propose_change_plan(
+    payload: ChangePlanRequest, ctx: AuthContext = Depends(require_any_role), db: AsyncSession = Depends(get_db)
+) -> ChangePlanOut:
+    run = await storefront_agent_service.propose_change_plan(db, ctx.org_id, instruction=payload.instruction)
+    return ChangePlanOut(agent_run_id=run.id, **run.result_json)
+
+
+@router.post("/change-plan/{agent_run_id}/apply", response_model=StorefrontVersionOut)
+async def apply_change_plan(
+    agent_run_id: uuid.UUID, ctx: AuthContext = Depends(require_any_role), db: AsyncSession = Depends(get_db)
+) -> StorefrontVersionOut:
+    draft = await storefront_agent_service.apply_change_plan(db, ctx.org_id, agent_run_id)
     return StorefrontVersionOut.from_version(draft)

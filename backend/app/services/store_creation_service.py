@@ -12,6 +12,7 @@ from app.db.models import (
 from app.errors import ConflictError, NotFoundError, ValidationDomainError
 from app.repositories import inventory_repo, product_repo, store_creation_repo
 from app.schemas.store_creation import PRODUCT_DRAFT_FIELD_NAMES
+from app.services import storefront_generation_service
 
 
 async def start_or_get_session(db: AsyncSession, org_id: uuid.UUID) -> StoreCreationSession:
@@ -119,3 +120,16 @@ async def reject_product_draft(db: AsyncSession, org_id: uuid.UUID, draft_id: uu
     draft.status = ProductDraftStatus.rejected
     await db.commit()
     return draft
+
+
+async def generate_storefront(db: AsyncSession, org_id: uuid.UUID) -> StoreCreationSession:
+    """Step 4 of Create My Store — generates the storefront draft from brand + accepted products,
+    then advances the session to ready_for_review (ARCHITECTURE.md "Create My Store")."""
+
+    session = await get_current_session_or_404(db, org_id)
+    await storefront_generation_service.generate(db, org_id)
+    if session.status in (StoreCreationStatus.product_input, StoreCreationStatus.generating_products):
+        session.status = StoreCreationStatus.ready_for_review
+        session.current_step = "ready_for_review"
+        await db.commit()
+    return session

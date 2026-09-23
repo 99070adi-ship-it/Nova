@@ -69,3 +69,9 @@ async def reject_product_draft(
 ) -> ProductDraftOut:
     draft = await store_creation_service.reject_product_draft(db, ctx.org_id, draft_id)
     return ProductDraftOut.model_validate(draft)
+
+
+@router.post("/generate-storefront", response_model=SessionOut)
+async def generate_storefront(ctx: AuthContext = Depends(require_owner), db: AsyncSession = Depends(get_db)) -> SessionOut:
+    session = await store_creation_service.generate_storefront(db, ctx.org_id)
+    return SessionOut.model_validate(session)

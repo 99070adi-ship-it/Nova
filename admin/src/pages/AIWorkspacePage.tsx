@@ -7,6 +7,8 @@ const AGENTS = [
   { key: "sales_agent", label: "Sales Agent", hint: 'Try "How are sales this month?"' },
   { key: "inventory_agent", label: "Inventory Agent", hint: 'Try "What\'s running low?"' },
   { key: "customer_agent", label: "Customer Agent", hint: 'Try "Who hasn\'t ordered recently?"' },
+  { key: "marketing_agent", label: "Marketing Agent", hint: 'Try "Any campaign ideas?"' },
+  { key: "operations_agent", label: "Operations Agent", hint: 'Try "Look up an order"' },
 ];
 
 export default function AIWorkspacePage() {

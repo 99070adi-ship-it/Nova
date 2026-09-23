@@ -373,6 +373,32 @@ export async function updateTheme(input: Record<string, string>) {
   return apiFetch<StorefrontVersion>("/storefront/theme", { method: "PATCH", body: JSON.stringify(input) });
 }
 
+export interface ChangePlanItem {
+  action: "add_section" | "update_theme" | "none";
+  description: string;
+  section_type?: string | null;
+  configuration?: Record<string, unknown> | null;
+}
+
+export interface ChangePlan {
+  agent_run_id: string;
+  instruction: string;
+  plan: ChangePlanItem[];
+  applied: boolean;
+}
+
+export async function proposeChangePlan(instruction: string) {
+  return apiFetch<ChangePlan>("/storefront/change-plan", { method: "POST", body: JSON.stringify({ instruction }) });
+}
+
+export async function applyChangePlan(agentRunId: string) {
+  return apiFetch<StorefrontVersion>(`/storefront/change-plan/${agentRunId}/apply`, { method: "POST" });
+}
+
+export async function generateStorefront() {
+  return apiFetch<{ id: string; status: string }>("/store-creation/generate-storefront", { method: "POST" });
+}
+
 // ---- AI Workspace ----
 
 export interface Conversation {

@@ -33,6 +33,18 @@ CUSTOMER_AGENT_SYSTEM_PROMPT = (
     f"get_customer_activity, identifying repeat buyers and churn risk. {_SHARED_GUARDRAILS}"
 )
 
+MARKETING_AGENT_SYSTEM_PROMPT = (
+    f"You are NOVA's Marketing Agent. You look at sales, inventory, and customer data to find "
+    f"campaign opportunities (e.g. good-inventory-but-declining-sales products, win-back targets "
+    f"for inactive customers), then propose a campaign draft with draft_campaign. You never send "
+    f"anything — drafting only. {_SHARED_GUARDRAILS}"
+)
+
+OPERATIONS_AGENT_SYSTEM_PROMPT = (
+    f"You are NOVA's Operations Agent. You look up orders with get_order_details and can propose "
+    f"cancelling one with cancel_order when asked. {_SHARED_GUARDRAILS}"
+)
+
 # A generic verification agent for Prototype 1's AI foundation (ARCHITECTURE.md P5) — proves the
 # provider/tool/proposal/audit pipeline end to end. Specialized agents below (P7+) narrow the
 # tool_names to one business domain each; Store Manager (P9) delegates to them.
@@ -60,5 +72,17 @@ AGENT_REGISTRY: dict[str, AgentSpec] = {
         name="Customer Agent",
         system_prompt=CUSTOMER_AGENT_SYSTEM_PROMPT,
         tool_names=["get_customer_activity"],
+    ),
+    "marketing_agent": AgentSpec(
+        key="marketing_agent",
+        name="Marketing Agent",
+        system_prompt=MARKETING_AGENT_SYSTEM_PROMPT,
+        tool_names=["get_sales_metrics", "get_low_stock_products", "get_customer_activity", "draft_campaign"],
+    ),
+    "operations_agent": AgentSpec(
+        key="operations_agent",
+        name="Operations Agent",
+        system_prompt=OPERATIONS_AGENT_SYSTEM_PROMPT,
+        tool_names=["get_order_details", "cancel_order"],
     ),
 }

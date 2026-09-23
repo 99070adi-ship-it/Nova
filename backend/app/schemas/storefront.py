@@ -65,3 +65,14 @@ class ThemeUpdate(BaseModel):
 
 class DiffOut(BaseModel):
     changes: list[str]
+
+
+class ChangePlanRequest(BaseModel):
+    instruction: str
+
+
+class ChangePlanOut(BaseModel):
+    agent_run_id: uuid.UUID
+    instruction: str
+    plan: list[dict]
+    applied: bool

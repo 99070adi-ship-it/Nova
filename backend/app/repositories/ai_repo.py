@@ -47,6 +47,11 @@ async def complete_agent_run(db: AsyncSession, run: AIAgentRun, *, status, promp
     return run
 
 
+async def get_agent_run(db: AsyncSession, org_id: uuid.UUID, run_id: uuid.UUID) -> AIAgentRun | None:
+    result = await db.execute(select(AIAgentRun).where(AIAgentRun.id == run_id, AIAgentRun.org_id == org_id))
+    return result.scalar_one_or_none()
+
+
 async def get_store_summary(db: AsyncSession, org_id: uuid.UUID) -> dict:
     products_count = (await db.execute(select(func.count()).select_from(Product).where(Product.org_id == org_id))).scalar_one()
     customers_count = (await db.execute(select(func.count()).select_from(Customer).where(Customer.org_id == org_id))).scalar_one()

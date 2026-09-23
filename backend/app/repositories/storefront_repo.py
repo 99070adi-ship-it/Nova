@@ -96,6 +96,13 @@ async def delete_section(db: AsyncSession, section: StoreSection) -> None:
     await db.flush()
 
 
+async def delete_draft(db: AsyncSession, org_id: uuid.UUID) -> None:
+    draft = await get_draft(db, org_id)
+    if draft is not None:
+        await db.delete(draft)
+        await db.flush()
+
+
 async def update_theme(db: AsyncSession, storefront_version_id: uuid.UUID, tokens: dict) -> StoreTheme:
     result = await db.execute(select(StoreTheme).where(StoreTheme.storefront_version_id == storefront_version_id))
     theme = result.scalar_one()

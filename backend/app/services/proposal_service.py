@@ -8,13 +8,20 @@ from datetime import timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.proposals import canonicalize_arguments, compute_payload_hash
-from app.ai.tools import TOOL_REGISTRY, ToolValidationError, UpdateProductContentArgs, validate_tool_arguments
+from app.ai.tools import (
+    TOOL_REGISTRY,
+    CancelOrderArgs,
+    DraftCampaignArgs,
+    ToolValidationError,
+    UpdateProductContentArgs,
+    validate_tool_arguments,
+)
 from app.config import get_settings
 from app.core.audit import write_audit_event
 from app.db.base import utcnow
-from app.db.models import AuditActorType, ProposalStatus, RiskClassification, StorefrontVersionStatus, ToolProposal
+from app.db.models import AuditActorType, OrderStatus, ProposalStatus, RiskClassification, StorefrontVersionStatus, ToolProposal
 from app.errors import ConflictError, StaleProposalError, ValidationDomainError
-from app.repositories import product_repo, proposal_repo, storefront_repo
+from app.repositories import order_repo, product_repo, proposal_repo, storefront_repo
 from app.services.storefront_service import snapshot_pages
 
 settings = get_settings()
@@ -123,9 +130,27 @@ async def _execute_publish_storefront(db: AsyncSession, org_id: uuid.UUID, propo
     return {"storefront_version_id": str(live.id)}
 
 
+async def _execute_draft_campaign(db: AsyncSession, org_id: uuid.UUID, proposal: ToolProposal) -> dict:
+    # No external send integration in Prototype 1 — "executing" this proposal just means the
+    # campaign draft (goal/segment/copy) is recorded as approved output, nothing is sent
+    # (ARCHITECTURE.md "Marketing Agent").
+    args = DraftCampaignArgs.model_validate(proposal.canonical_arguments)
+    return {"goal": args.goal, "target_segment": args.target_segment, "campaign_copy": args.campaign_copy, "status": "drafted_not_sent"}
+
+
+async def _execute_cancel_order(db: AsyncSession, org_id: uuid.UUID, proposal: ToolProposal) -> dict:
+    args = CancelOrderArgs.model_validate(proposal.canonical_arguments)
+    order = await order_repo.set_status(db, org_id, uuid.UUID(args.order_id), status=OrderStatus.cancelled)
+    if order is None:
+        raise StaleProposalError("Order no longer exists")
+    return {"order_id": str(order.id), "status": order.status.value, "reason": args.reason}
+
+
 _EXECUTORS = {
     "update_product_content": _execute_update_product_content,
     "publish_storefront": _execute_publish_storefront,
+    "draft_campaign": _execute_draft_campaign,
+    "cancel_order": _execute_cancel_order,
 }
 
 

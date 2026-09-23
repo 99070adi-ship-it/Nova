@@ -49,6 +49,11 @@ class FakeLLMProvider(LLMProvider):
         if not available_tools and "known_fields" in context:
             return ProviderStepResult(final=ProviderFinal(text=json.dumps(_synthesize_product_content(context))))
 
+        # No tools + an "instruction" context shape ⇒ the Storefront Agent asking for a Change
+        # Plan. Synthesize deterministic, keyword-driven edits rather than a no-op.
+        if not available_tools and "instruction" in context:
+            return ProviderStepResult(final=ProviderFinal(text=json.dumps(_synthesize_change_plan(context))))
+
         # No tool results yet — call the first read-only tool this agent has access to, if any,
         # so an unscripted run still exercises a real tool round trip (call -> execution -> result
         # fed back -> final answer) rather than just echoing text. Not "smart" — a deterministic
@@ -113,6 +118,51 @@ def _synthesize_product_content(context: dict) -> dict:
         "seo_title": f"{title} | {brand_name}",
         "seo_description": description[:160],
     }
+
+
+def _synthesize_change_plan(context: dict) -> list[dict]:
+    """Deterministic stand-in for the Storefront Agent's NL-to-structured-edit translation —
+    keyword-driven, not a language model, but genuinely reads the instruction and existing draft
+    rather than always returning the same plan (ARCHITECTURE.md "Store Builder — natural-language
+    editing")."""
+
+    instruction = (context.get("instruction") or "").lower()
+    existing_types = set(context.get("existing_section_types") or [])
+    brand = context.get("brand", {})
+    plan: list[dict] = []
+
+    if any(w in instruction for w in ("story", "about", "history")) and "brand_story" not in existing_types:
+        plan.append(
+            {
+                "action": "add_section", "section_type": "brand_story",
+                "description": "Add a brand story section to the homepage.",
+                "configuration": {
+                    "heading": "Our story",
+                    "body": brand.get("description") or brand.get("positioning") or f"About {brand.get('name', 'us')}.",
+                },
+            }
+        )
+
+    if any(w in instruction for w in ("premium", "luxury", "elevate", "elegant", "upscale")):
+        plan.append(
+            {
+                "action": "update_theme", "description": "Darken the palette and tighten corners for a more premium feel.",
+                "configuration": {"primary_color": "#0c0a09", "border_radius": "2px"},
+            }
+        )
+
+    if any(w in instruction for w in ("playful", "bold", "bright", "fun")):
+        plan.append(
+            {
+                "action": "update_theme", "description": "Brighten the palette and round corners for a more playful feel.",
+                "configuration": {"primary_color": "#e11d48", "border_radius": "16px"},
+            }
+        )
+
+    if not plan:
+        plan.append({"action": "none", "description": "No actionable change matched this instruction.", "configuration": None})
+
+    return plan
 
 
 def scripted_tool_call(name: str, arguments: dict, call_id: str = "call_1") -> ProviderStepResult:
