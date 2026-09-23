@@ -51,6 +51,59 @@ async def get_org_by_slug(db: AsyncSession, slug: str) -> Organization | None:
     return result.scalar_one_or_none()
 
 
+async def get_section_in_draft(db: AsyncSession, org_id: uuid.UUID, section_id: uuid.UUID) -> StoreSection | None:
+    result = await db.execute(
+        select(StoreSection)
+        .join(StorePage, StoreSection.page_id == StorePage.id)
+        .join(StorefrontVersion, StorePage.storefront_version_id == StorefrontVersion.id)
+        .where(
+            StoreSection.id == section_id, StorefrontVersion.org_id == org_id,
+            StorefrontVersion.status == StorefrontVersionStatus.draft,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_page_in_draft(db: AsyncSession, org_id: uuid.UUID, page_id: uuid.UUID) -> StorePage | None:
+    result = await db.execute(
+        select(StorePage)
+        .join(StorefrontVersion, StorePage.storefront_version_id == StorefrontVersion.id)
+        .where(
+            StorePage.id == page_id, StorefrontVersion.org_id == org_id,
+            StorefrontVersion.status == StorefrontVersionStatus.draft,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def add_section(db: AsyncSession, page_id: uuid.UUID, *, type: str, order: int, configuration: dict) -> StoreSection:
+    section = StoreSection(page_id=page_id, type=type, order=order, configuration=configuration)
+    db.add(section)
+    await db.flush()
+    return section
+
+
+async def update_section(db: AsyncSession, section: StoreSection, **fields) -> StoreSection:
+    for key, value in fields.items():
+        if value is not None:
+            setattr(section, key, value)
+    await db.flush()
+    return section
+
+
+async def delete_section(db: AsyncSession, section: StoreSection) -> None:
+    await db.delete(section)
+    await db.flush()
+
+
+async def update_theme(db: AsyncSession, storefront_version_id: uuid.UUID, tokens: dict) -> StoreTheme:
+    result = await db.execute(select(StoreTheme).where(StoreTheme.storefront_version_id == storefront_version_id))
+    theme = result.scalar_one()
+    theme.tokens = {**theme.tokens, **tokens}
+    await db.flush()
+    return theme
+
+
 async def create_version(
     db: AsyncSession, org_id: uuid.UUID, *, status: StorefrontVersionStatus, generated_by: GeneratedBy,
     pages: list[dict], theme_tokens: dict, published_at=None,

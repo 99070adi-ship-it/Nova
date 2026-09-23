@@ -42,3 +42,26 @@ class StorefrontVersionOut(BaseModel):
             published_at=version.published_at, theme=version.theme.tokens,
             pages=[PageOut.model_validate(p) for p in sorted(version.pages, key=lambda p: p.order)],
         )
+
+
+class SectionCreate(BaseModel):
+    page_id: uuid.UUID
+    type: str
+    order: int = 0
+    configuration: dict = {}
+
+
+class SectionUpdate(BaseModel):
+    order: int | None = None
+    configuration: dict | None = None
+
+
+class ThemeUpdate(BaseModel):
+    primary_color: str | None = None
+    background_color: str | None = None
+    font_family: str | None = None
+    border_radius: str | None = None
+
+
+class DiffOut(BaseModel):
+    changes: list[str]

@@ -5,6 +5,7 @@ import { useAuth } from "../lib/auth";
 interface NavItem {
   label: string;
   to: string;
+  external?: boolean;
 }
 
 interface NavGroup {
@@ -35,7 +36,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Store",
     items: [
       { label: "Store Builder", to: "/store-builder" },
-      { label: "Storefront", to: "/storefront-preview" },
+      { label: "Storefront", to: "http://localhost:5174/", external: true },
     ],
   },
   {
@@ -63,20 +64,32 @@ export default function AppLayout() {
                 {group.label}
               </p>
               <div className="space-y-0.5">
-                {group.items.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    className={({ isActive }) =>
-                      clsx(
-                        "block rounded-md px-2 py-1.5 text-sm",
-                        isActive ? "bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-100",
-                      )
-                    }
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
+                {group.items.map((item) =>
+                  item.external ? (
+                    <a
+                      key={item.to}
+                      href={item.to}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block rounded-md px-2 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100"
+                    >
+                      {item.label} ↗
+                    </a>
+                  ) : (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      className={({ isActive }) =>
+                        clsx(
+                          "block rounded-md px-2 py-1.5 text-sm",
+                          isActive ? "bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-100",
+                        )
+                      }
+                    >
+                      {item.label}
+                    </NavLink>
+                  ),
+                )}
               </div>
             </div>
           ))}

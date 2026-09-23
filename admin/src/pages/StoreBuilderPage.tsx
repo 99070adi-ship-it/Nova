@@ -1,0 +1,216 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import {
+  ApiError,
+  StoreSection,
+  addSection,
+  deleteSection,
+  getStorefrontDiff,
+  getStorefrontDraft,
+  publishStorefront,
+  updateSection,
+  updateTheme,
+} from "../api/client";
+
+const SECTION_LABELS: Record<string, string> = {
+  hero: "Hero",
+  product_grid: "Product grid",
+  brand_story: "Brand story",
+};
+
+function SectionEditor({ section, pageId }: { section: StoreSection; pageId: string }) {
+  const queryClient = useQueryClient();
+  const [config, setConfig] = useState(section.configuration);
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["storefront-draft"] });
+    queryClient.invalidateQueries({ queryKey: ["storefront-diff"] });
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: () => updateSection(section.id, { configuration: config }),
+    onSuccess: invalidate,
+  });
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteSection(section.id),
+    onSuccess: invalidate,
+  });
+
+  const setField = (key: string, value: string | number) => setConfig((c) => ({ ...c, [key]: value }));
+
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-white p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+          {SECTION_LABELS[section.type] ?? section.type}
+        </span>
+        <button onClick={() => deleteMutation.mutate()} className="text-xs text-red-600 hover:underline">
+          Remove
+        </button>
+      </div>
+
+      {section.type === "hero" && (
+        <div className="grid grid-cols-2 gap-2">
+          <input placeholder="Headline" value={(config.headline as string) ?? ""} onChange={(e) => setField("headline", e.target.value)} className="col-span-2 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+          <input placeholder="Subheadline" value={(config.subheadline as string) ?? ""} onChange={(e) => setField("subheadline", e.target.value)} className="col-span-2 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+          <input placeholder="CTA text" value={(config.cta_text as string) ?? ""} onChange={(e) => setField("cta_text", e.target.value)} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+          <input placeholder="CTA link" value={(config.cta_href as string) ?? ""} onChange={(e) => setField("cta_href", e.target.value)} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+        </div>
+      )}
+
+      {section.type === "product_grid" && (
+        <div className="grid grid-cols-2 gap-2">
+          <input placeholder="Title" value={(config.title as string) ?? ""} onChange={(e) => setField("title", e.target.value)} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+          <input
+            type="number"
+            placeholder="Limit"
+            value={(config.limit as number) ?? 12}
+            onChange={(e) => setField("limit", parseInt(e.target.value, 10))}
+            className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+          />
+        </div>
+      )}
+
+      {section.type === "brand_story" && (
+        <div className="space-y-2">
+          <input placeholder="Heading" value={(config.heading as string) ?? ""} onChange={(e) => setField("heading", e.target.value)} className="w-full rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+          <textarea placeholder="Body" value={(config.body as string) ?? ""} onChange={(e) => setField("body", e.target.value)} className="w-full rounded-md border border-neutral-300 px-2 py-1 text-sm" rows={3} />
+        </div>
+      )}
+
+      <button
+        onClick={() => saveMutation.mutate()}
+        disabled={saveMutation.isPending}
+        className="mt-3 rounded-md border border-neutral-300 px-3 py-1 text-xs font-medium hover:bg-neutral-100"
+      >
+        Save section
+      </button>
+    </div>
+  );
+}
+
+export default function StoreBuilderPage() {
+  const queryClient = useQueryClient();
+  const { data: draft, isLoading } = useQuery({ queryKey: ["storefront-draft"], queryFn: getStorefrontDraft });
+  const { data: diff } = useQuery({ queryKey: ["storefront-diff"], queryFn: getStorefrontDiff });
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishedOk, setPublishedOk] = useState(false);
+
+  const publishMutation = useMutation({
+    mutationFn: publishStorefront,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["storefront-draft"] });
+      queryClient.invalidateQueries({ queryKey: ["storefront-diff"] });
+      setPublishError(null);
+      setPublishedOk(true);
+      setTimeout(() => setPublishedOk(false), 3000);
+    },
+    onError: (err) => setPublishError(err instanceof ApiError ? err.message : "Publish failed"),
+  });
+
+  const themeMutation = useMutation({
+    mutationFn: (tokens: Record<string, string>) => updateTheme(tokens),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["storefront-draft"] });
+      queryClient.invalidateQueries({ queryKey: ["storefront-diff"] });
+    },
+  });
+
+  const addSectionMutation = useMutation({
+    mutationFn: (type: string) => {
+      const page = draft!.pages[0];
+      const defaults: Record<string, Record<string, unknown>> = {
+        hero: { headline: "New headline", subheadline: "", cta_text: "Shop now", cta_href: "/shop" },
+        product_grid: { title: "Products", limit: 12, collection_id: null },
+        brand_story: { heading: "Our story", body: "" },
+      };
+      return addSection({ page_id: page.id, type, order: page.sections.length, configuration: defaults[type] ?? {} });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["storefront-draft"] });
+      queryClient.invalidateQueries({ queryKey: ["storefront-diff"] });
+    },
+  });
+
+  if (isLoading || !draft) return <p className="text-sm text-neutral-400">Loading…</p>;
+  const page = draft.pages[0];
+  const previewUrl = "http://localhost:5174/";
+
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
+      <div>
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-semibold">Store Builder</h1>
+          <a href={previewUrl} target="_blank" rel="noreferrer" className="text-sm text-neutral-500 hover:underline">
+            Open storefront ↗
+          </a>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {page.sections
+            .slice()
+            .sort((a, b) => a.order - b.order)
+            .map((s) => (
+              <SectionEditor key={s.id} section={s} pageId={page.id} />
+            ))}
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          {(["hero", "product_grid", "brand_story"] as const).map((type) => (
+            <button
+              key={type}
+              onClick={() => addSectionMutation.mutate(type)}
+              className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100"
+            >
+              + {SECTION_LABELS[type]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="rounded-lg border border-neutral-200 bg-white p-4">
+          <h2 className="text-sm font-semibold">Theme</h2>
+          <div className="mt-3 space-y-2">
+            <label className="block text-xs text-neutral-500">
+              Primary color
+              <input
+                type="color"
+                defaultValue={draft.theme.primary_color}
+                onChange={(e) => themeMutation.mutate({ primary_color: e.target.value })}
+                className="ml-2 h-6 w-10 align-middle"
+              />
+            </label>
+            <label className="block text-xs text-neutral-500">
+              Background color
+              <input
+                type="color"
+                defaultValue={draft.theme.background_color}
+                onChange={(e) => themeMutation.mutate({ background_color: e.target.value })}
+                className="ml-2 h-6 w-10 align-middle"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-neutral-200 bg-white p-4">
+          <h2 className="text-sm font-semibold">Changes since last publish</h2>
+          <ul className="mt-2 space-y-1 text-xs text-neutral-500">
+            {diff?.changes.map((c, i) => (
+              <li key={i}>• {c}</li>
+            ))}
+          </ul>
+          <button
+            onClick={() => publishMutation.mutate()}
+            disabled={publishMutation.isPending}
+            className="mt-4 w-full rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white"
+          >
+            {publishMutation.isPending ? "Publishing…" : "Publish"}
+          </button>
+          {publishedOk && <p className="mt-2 text-xs text-emerald-600">Published.</p>}
+          {publishError && <p className="mt-2 text-xs text-red-600">{publishError}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}

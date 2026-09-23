@@ -294,4 +294,58 @@ export async function rejectProductDraft(draftId: string) {
   return apiFetch<ProductDraft>(`/store-creation/product-drafts/${draftId}/reject`, { method: "POST" });
 }
 
+// ---- Storefront / Store Builder ----
+
+export interface StoreSection {
+  id: string;
+  type: string;
+  order: number;
+  configuration: Record<string, unknown>;
+}
+
+export interface StorePage {
+  id: string;
+  slug: string;
+  title: string;
+  order: number;
+  sections: StoreSection[];
+}
+
+export interface StorefrontVersion {
+  id: string;
+  status: "draft" | "live";
+  generated_by: "ai" | "owner" | "mixed";
+  published_at: string | null;
+  theme: Record<string, string>;
+  pages: StorePage[];
+}
+
+export async function getStorefrontDraft() {
+  return apiFetch<StorefrontVersion>("/storefront/draft");
+}
+
+export async function publishStorefront() {
+  return apiFetch<StorefrontVersion>("/storefront/publish", { method: "POST" });
+}
+
+export async function getStorefrontDiff() {
+  return apiFetch<{ changes: string[] }>("/storefront/diff");
+}
+
+export async function addSection(input: { page_id: string; type: string; order: number; configuration: Record<string, unknown> }) {
+  return apiFetch<StorefrontVersion>("/storefront/sections", { method: "POST", body: JSON.stringify(input) });
+}
+
+export async function updateSection(sectionId: string, input: { order?: number; configuration?: Record<string, unknown> }) {
+  return apiFetch<StorefrontVersion>(`/storefront/sections/${sectionId}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export async function deleteSection(sectionId: string) {
+  return apiFetch<StorefrontVersion>(`/storefront/sections/${sectionId}`, { method: "DELETE" });
+}
+
+export async function updateTheme(input: Record<string, string>) {
+  return apiFetch<StorefrontVersion>("/storefront/theme", { method: "PATCH", body: JSON.stringify(input) });
+}
+
 export { API_BASE_URL };

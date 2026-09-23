@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, text
 from sqlalchemy.dialects.postgresql import ENUM as PGEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -43,6 +43,17 @@ class StorefrontVersion(Base, UUIDPKMixin, TimestampMixin):
 
     pages: Mapped[list["StorePage"]] = relationship(back_populates="storefront_version", cascade="all, delete-orphan")
     theme: Mapped["StoreTheme"] = relationship(back_populates="storefront_version", uselist=False, cascade="all, delete-orphan")
+
+    __table_args__ = (
+        # At most one draft per org, enforced at the DB level — get_or_create_draft's
+        # check-then-create is otherwise racy under concurrent requests (e.g. the admin's
+        # /storefront/draft and /storefront/diff calls landing in the same instant on page load
+        # both see "no draft" and both try to create one).
+        Index(
+            "uq_storefront_versions_org_id_draft", "org_id", unique=True,
+            postgresql_where=text("status = 'draft'"),
+        ),
+    )
 
 
 class StorePage(Base, UUIDPKMixin, TimestampMixin):
