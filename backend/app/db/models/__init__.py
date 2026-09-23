@@ -1,3 +1,14 @@
+from app.db.models.ai import (
+    AgentRunStatus,
+    AIAgentRun,
+    AIConversation,
+    AIMessage,
+    AuditActorType,
+    AuditLog,
+    ProposalStatus,
+    RiskClassification,
+    ToolProposal,
+)
 from app.db.models.collection import Collection, CollectionProduct, CollectionProductCreatedBy
 from app.db.models.customer import Customer
 from app.db.models.inventory import Inventory, InventoryLocation, InventoryMovement
@@ -19,6 +30,12 @@ from app.db.models.storefront import GeneratedBy, StorePage, StoreSection, Store
 from app.db.models.user import RefreshToken, User, UserRole
 
 __all__ = [
+    "AIAgentRun",
+    "AIConversation",
+    "AIMessage",
+    "AgentRunStatus",
+    "AuditActorType",
+    "AuditLog",
     "BrandProfile",
     "CartEvent",
     "CartEventType",
@@ -43,7 +60,9 @@ __all__ = [
     "ProductStatus",
     "ProductVariant",
     "Promotion",
+    "ProposalStatus",
     "RefreshToken",
+    "RiskClassification",
     "Store",
     "StoreCreationSession",
     "StoreCreationStatus",
@@ -52,6 +71,7 @@ __all__ = [
     "StoreTheme",
     "StorefrontVersion",
     "StorefrontVersionStatus",
+    "ToolProposal",
     "User",
     "UserRole",
 ]

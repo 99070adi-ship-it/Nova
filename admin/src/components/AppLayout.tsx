@@ -42,6 +42,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "System",
     items: [
+      { label: "Approvals", to: "/approvals" },
       { label: "Activity", to: "/activity" },
       { label: "Settings", to: "/settings" },
     ],

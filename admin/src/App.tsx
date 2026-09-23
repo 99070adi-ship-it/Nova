@@ -1,6 +1,9 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./components/AppLayout";
 import { useAuth } from "./lib/auth";
+import ActivityPage from "./pages/ActivityPage";
+import AIWorkspacePage from "./pages/AIWorkspacePage";
+import ApprovalsPage from "./pages/ApprovalsPage";
 import CreateMyStorePage from "./pages/CreateMyStorePage";
 import CustomersPage from "./pages/CustomersPage";
 import InventoryPage from "./pages/InventoryPage";
@@ -37,9 +40,10 @@ export default function App() {
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/marketing" element={<PlaceholderPage title="Marketing" phase="P8" />} />
         <Route path="/analytics" element={<PlaceholderPage title="Analytics" phase="P7" />} />
-        <Route path="/ai-workspace" element={<PlaceholderPage title="AI Workspace" phase="P5" />} />
+        <Route path="/ai-workspace" element={<AIWorkspacePage />} />
         <Route path="/store-builder" element={<StoreBuilderPage />} />
-        <Route path="/activity" element={<PlaceholderPage title="Activity" phase="P5" />} />
+        <Route path="/approvals" element={<ApprovalsPage />} />
+        <Route path="/activity" element={<ActivityPage />} />
         <Route path="/settings" element={<PlaceholderPage title="Settings" phase="P2" />} />
         <Route index element={<Navigate to="/overview" replace />} />
       </Route>

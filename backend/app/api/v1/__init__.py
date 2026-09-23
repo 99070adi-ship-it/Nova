@@ -1,5 +1,8 @@
 from fastapi import APIRouter
 
+from app.api.v1.routes_activity import router as activity_router
+from app.api.v1.routes_ai import router as ai_router
+from app.api.v1.routes_approvals import router as approvals_router
 from app.api.v1.routes_auth import router as auth_router
 from app.api.v1.routes_collections import router as collections_router
 from app.api.v1.routes_customers import router as customers_router
@@ -21,5 +24,8 @@ api_router.include_router(orders_router, prefix="/orders", tags=["orders"])
 api_router.include_router(promotions_router, prefix="/promotions", tags=["promotions"])
 api_router.include_router(store_creation_router, prefix="/store-creation", tags=["store-creation"])
 api_router.include_router(storefront_router, prefix="/storefront", tags=["storefront"])
+api_router.include_router(ai_router, prefix="/ai", tags=["ai"])
+api_router.include_router(approvals_router, prefix="/approvals", tags=["approvals"])
+api_router.include_router(activity_router, prefix="/activity", tags=["activity"])
 # Unauthenticated — consumed by the separate storefront/ app (anonymous browsing).
 api_router.include_router(public_router, prefix="/public", tags=["public"])

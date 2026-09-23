@@ -356,7 +356,7 @@ always a `ToolProposal`). No external send integration in Prototype 1 — drafti
 - **Operate**: Overview, Products, Inventory, Orders, Customers, Marketing
 - **Grow**: Analytics, AI Workspace
 - **Store**: Store Builder, Storefront (preview link)
-- **System**: Activity, Settings
+- **System**: Approvals, Activity, Settings
 
 Every domain page has one contextual AI entry point that opens the AI Workspace with the relevant
 `AIConversation.context` pre-attached (server-validated).

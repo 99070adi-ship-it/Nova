@@ -348,4 +348,87 @@ export async function updateTheme(input: Record<string, string>) {
   return apiFetch<StorefrontVersion>("/storefront/theme", { method: "PATCH", body: JSON.stringify(input) });
 }
 
+// ---- AI Workspace ----
+
+export interface Conversation {
+  id: string;
+  agent_key: string;
+  context: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AIMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+}
+
+export interface PostMessageResult {
+  assistant_text: string;
+  hit_loop_cap: boolean;
+  tool_call_log: { name: string; arguments: Record<string, unknown>; is_mutating: boolean }[];
+}
+
+export async function startConversation(input: { agent_key: string; context: Record<string, unknown> }) {
+  return apiFetch<Conversation>("/ai/conversations", { method: "POST", body: JSON.stringify(input) });
+}
+
+export async function listMessages(conversationId: string) {
+  return apiFetch<AIMessage[]>(`/ai/conversations/${conversationId}/messages`);
+}
+
+export async function postMessage(conversationId: string, text: string) {
+  return apiFetch<PostMessageResult>(`/ai/conversations/${conversationId}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+}
+
+// ---- Approvals ----
+
+export interface ToolProposal {
+  id: string;
+  tool_name: string;
+  arguments: Record<string, unknown>;
+  risk_classification: "low" | "high";
+  status: "proposed" | "approved" | "rejected" | "executing" | "executed" | "execution_failed" | "stale" | "expired";
+  rejection_reason: string | null;
+  execution_result: Record<string, unknown> | null;
+  failure_reason: string | null;
+  expires_at: string;
+  created_at: string;
+}
+
+export async function listProposals(status?: string) {
+  const query = status ? `?status=${status}` : "";
+  return apiFetch<ToolProposal[]>(`/approvals${query}`);
+}
+
+export async function approveProposal(id: string) {
+  return apiFetch<ToolProposal>(`/approvals/${id}/approve`, { method: "POST" });
+}
+
+export async function rejectProposal(id: string, reason?: string) {
+  return apiFetch<ToolProposal>(`/approvals/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+
+// ---- Activity ----
+
+export interface AuditLogEntry {
+  id: string;
+  actor_type: "user" | "ai" | "system";
+  actor_id: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export async function listActivity() {
+  return apiFetch<AuditLogEntry[]>("/activity");
+}
+
 export { API_BASE_URL };

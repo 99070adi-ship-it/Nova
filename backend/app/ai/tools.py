@@ -1,0 +1,103 @@
+"""The model's entire action surface (ARCHITECTURE.md "Tool system"). Every entry satisfies the
+same contract regardless of whether it reads or mutates: typed schema, authorization requirement,
+tenant context (never a schema field — always injected server-side from AuthContext), risk
+classification, deterministic execution, audit event.
+
+Tool schemas deliberately never include org_id/user_id — there is nothing for the model to forge."""
+
+from dataclasses import dataclass
+from typing import Literal
+
+from pydantic import BaseModel
+
+
+class GetBrandProfileArgs(BaseModel):
+    fields: list[str] | None = None
+
+
+class GetStoreSummaryArgs(BaseModel):
+    pass
+
+
+class UpdateProductContentArgs(BaseModel):
+    product_id: str
+    title: str | None = None
+    description: str | None = None
+    category: str | None = None
+    seo_title: str | None = None
+    seo_description: str | None = None
+
+
+class PublishStorefrontArgs(BaseModel):
+    pass
+
+
+@dataclass(frozen=True)
+class ToolSpec:
+    name: str
+    description: str
+    args_model: type[BaseModel]
+    is_mutating: bool
+    risk_classification: Literal["low", "high"] | None  # None ⇒ read-only, executes inline
+    auto_executable: bool = False  # only for a narrow allowlist of low-risk write tools
+
+
+TOOL_REGISTRY: dict[str, ToolSpec] = {
+    "get_brand_profile": ToolSpec(
+        name="get_brand_profile",
+        description="Read the org's brand profile (name, vibe, positioning, target customer, ...). Pass `fields` to limit which ones come back.",
+        args_model=GetBrandProfileArgs,
+        is_mutating=False,
+        risk_classification=None,
+    ),
+    "get_store_summary": ToolSpec(
+        name="get_store_summary",
+        description="Get counts of products, customers, orders, and low-stock inventory for the org's store.",
+        args_model=GetStoreSummaryArgs,
+        is_mutating=False,
+        risk_classification=None,
+    ),
+    "update_product_content": ToolSpec(
+        name="update_product_content",
+        description="Propose updating a product's title/description/category/SEO fields. Never changes price, status, or inventory.",
+        args_model=UpdateProductContentArgs,
+        is_mutating=True,
+        risk_classification="low",
+        auto_executable=True,
+    ),
+    "publish_storefront": ToolSpec(
+        name="publish_storefront",
+        description="Propose publishing the current storefront draft as the live site.",
+        args_model=PublishStorefrontArgs,
+        is_mutating=True,
+        risk_classification="high",
+    ),
+}
+
+
+def tool_schemas_for_model(tool_names: list[str]) -> list[dict]:
+    """JSON-schema-shaped tool definitions handed to the provider, restricted to the subset a
+    given AgentSpec is allowed to call."""
+
+    return [
+        {"name": spec.name, "description": spec.description, "parameters": spec.args_model.model_json_schema()}
+        for name in tool_names
+        if (spec := TOOL_REGISTRY.get(name)) is not None
+    ]
+
+
+class ToolValidationError(Exception):
+    def __init__(self, tool_name: str, reason: str):
+        super().__init__(f"Invalid arguments for tool '{tool_name}': {reason}")
+        self.tool_name = tool_name
+        self.reason = reason
+
+
+def validate_tool_arguments(tool_name: str, raw_arguments: dict) -> BaseModel:
+    spec = TOOL_REGISTRY.get(tool_name)
+    if spec is None:
+        raise ToolValidationError(tool_name, "unknown tool")
+    try:
+        return spec.args_model.model_validate(raw_arguments)
+    except Exception as exc:  # pydantic ValidationError
+        raise ToolValidationError(tool_name, str(exc)) from exc

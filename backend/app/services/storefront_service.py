@@ -73,7 +73,7 @@ async def get_live_or_404(db: AsyncSession, org_id: uuid.UUID) -> StorefrontVers
     return live
 
 
-def _snapshot_pages(draft: StorefrontVersion) -> list[dict]:
+def snapshot_pages(draft: StorefrontVersion) -> list[dict]:
     return [
         {
             "slug": page.slug,
@@ -96,7 +96,7 @@ async def publish(db: AsyncSession, org_id: uuid.UUID) -> StorefrontVersion:
     draft = await get_or_create_draft(db, org_id)
     live = await storefront_repo.create_version(
         db, org_id, status=StorefrontVersionStatus.live, generated_by=draft.generated_by,
-        pages=_snapshot_pages(draft), theme_tokens=draft.theme.tokens, published_at=utcnow(),
+        pages=snapshot_pages(draft), theme_tokens=draft.theme.tokens, published_at=utcnow(),
     )
     await db.commit()
     return live
