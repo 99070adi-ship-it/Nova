@@ -1,0 +1,52 @@
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+from app.db.models import ProductDraftStatus, StoreCreationStatus
+
+
+class BrandInput(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = None
+    sells_what: str | None = None
+    target_customer: str | None = None
+    positioning: str | None = None
+    vibe_text: str | None = None
+    tone: str | None = None
+    inspiration_reference_text: str | None = None
+
+
+class SessionOut(BaseModel):
+    id: uuid.UUID
+    status: StoreCreationStatus
+    current_step: str | None
+    started_at: datetime = Field(alias="created_at")
+    completed_at: datetime | None
+
+    model_config = {"from_attributes": True, "populate_by_name": True}
+
+
+PRODUCT_DRAFT_FIELD_NAMES = ["title", "description", "price", "sku", "category", "tags"]
+
+
+class ProductDraftInput(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    price: float | None = None
+    sku: str | None = None
+    category: str | None = None
+    tags: list[str] | None = None
+    source_image_refs: list[str] | None = None
+
+
+class ProductDraftOut(BaseModel):
+    id: uuid.UUID
+    status: ProductDraftStatus
+    fields: dict
+    field_status: dict
+    source_image_refs: list[str] | None
+    accepted_product_id: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

@@ -1,6 +1,20 @@
 from fastapi import APIRouter
 
 from app.api.v1.routes_auth import router as auth_router
+from app.api.v1.routes_collections import router as collections_router
+from app.api.v1.routes_customers import router as customers_router
+from app.api.v1.routes_inventory import router as inventory_router
+from app.api.v1.routes_orders import router as orders_router
+from app.api.v1.routes_products import router as products_router
+from app.api.v1.routes_promotions import router as promotions_router
+from app.api.v1.routes_store_creation import router as store_creation_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
+api_router.include_router(products_router, prefix="/products", tags=["products"])
+api_router.include_router(collections_router, prefix="/collections", tags=["collections"])
+api_router.include_router(inventory_router, prefix="/inventory", tags=["inventory"])
+api_router.include_router(customers_router, prefix="/customers", tags=["customers"])
+api_router.include_router(orders_router, prefix="/orders", tags=["orders"])
+api_router.include_router(promotions_router, prefix="/promotions", tags=["promotions"])
+api_router.include_router(store_creation_router, prefix="/store-creation", tags=["store-creation"])

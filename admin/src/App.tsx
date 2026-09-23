@@ -1,9 +1,14 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./components/AppLayout";
 import { useAuth } from "./lib/auth";
+import CreateMyStorePage from "./pages/CreateMyStorePage";
+import CustomersPage from "./pages/CustomersPage";
+import InventoryPage from "./pages/InventoryPage";
 import LoginPage from "./pages/LoginPage";
+import OrdersPage from "./pages/OrdersPage";
 import OverviewPage from "./pages/OverviewPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
+import ProductsPage from "./pages/ProductsPage";
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const { isAuthenticated, loading } = useAuth();
@@ -24,10 +29,11 @@ export default function App() {
         }
       >
         <Route path="/overview" element={<OverviewPage />} />
-        <Route path="/products" element={<PlaceholderPage title="Products" phase="P2" />} />
-        <Route path="/inventory" element={<PlaceholderPage title="Inventory" phase="P2" />} />
-        <Route path="/orders" element={<PlaceholderPage title="Orders" phase="P2" />} />
-        <Route path="/customers" element={<PlaceholderPage title="Customers" phase="P2" />} />
+        <Route path="/create-store" element={<CreateMyStorePage />} />
+        <Route path="/products" element={<ProductsPage />} />
+        <Route path="/inventory" element={<InventoryPage />} />
+        <Route path="/orders" element={<OrdersPage />} />
+        <Route path="/customers" element={<CustomersPage />} />
         <Route path="/marketing" element={<PlaceholderPage title="Marketing" phase="P8" />} />
         <Route path="/analytics" element={<PlaceholderPage title="Analytics" phase="P7" />} />
         <Route path="/ai-workspace" element={<PlaceholderPage title="AI Workspace" phase="P5" />} />
