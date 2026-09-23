@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Env
+.env
+.env.local
+*.env.local
+
+# Editors / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Vercel (if ever linked)
+.vercel/
