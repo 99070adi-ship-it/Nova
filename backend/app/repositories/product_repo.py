@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -56,6 +56,15 @@ async def get_published_product_by_slug(db: AsyncSession, org_id: uuid.UUID, slu
         .options(selectinload(Product.variants))
     )
     return result.scalar_one_or_none()
+
+
+async def list_products_missing_description(db: AsyncSession, org_id: uuid.UUID) -> list[Product]:
+    result = await db.execute(
+        select(Product)
+        .where(Product.org_id == org_id, or_(Product.description.is_(None), Product.description == ""))
+        .options(selectinload(Product.variants))
+    )
+    return list(result.scalars().unique().all())
 
 
 async def update_product(db: AsyncSession, org_id: uuid.UUID, product_id: uuid.UUID, **fields) -> Product | None:

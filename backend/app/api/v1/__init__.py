@@ -13,6 +13,7 @@ from app.api.v1.routes_products import router as products_router
 from app.api.v1.routes_promotions import router as promotions_router
 from app.api.v1.routes_public import router as public_router
 from app.api.v1.routes_store_creation import router as store_creation_router
+from app.api.v1.routes_store_manager import router as store_manager_router
 from app.api.v1.routes_storefront import router as storefront_router
 
 api_router = APIRouter()
@@ -26,6 +27,7 @@ api_router.include_router(promotions_router, prefix="/promotions", tags=["promot
 api_router.include_router(store_creation_router, prefix="/store-creation", tags=["store-creation"])
 api_router.include_router(storefront_router, prefix="/storefront", tags=["storefront"])
 api_router.include_router(ai_router, prefix="/ai", tags=["ai"])
+api_router.include_router(store_manager_router, prefix="/store-manager", tags=["store-manager"])
 api_router.include_router(approvals_router, prefix="/approvals", tags=["approvals"])
 api_router.include_router(activity_router, prefix="/activity", tags=["activity"])
 api_router.include_router(analytics_router, prefix="/analytics", tags=["analytics"])

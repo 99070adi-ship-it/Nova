@@ -58,6 +58,37 @@ class RejectProposal(BaseModel):
     reason: str | None = None
 
 
+class StoreHealthFindingOut(BaseModel):
+    category: str
+    metric: str
+    status: str
+    finding: str
+    severity: str
+    evidence: dict
+    suggested_action: str | None
+
+
+class StoreHealthReportOut(BaseModel):
+    run_id: uuid.UUID
+    findings: list[StoreHealthFindingOut]
+    narrative: dict[str, str]
+
+
+class ActionPlanItemOut(BaseModel):
+    tool_name: str
+    risk: str
+    auto_executable: bool
+    status: str
+    proposal_id: uuid.UUID
+    description: str
+
+
+class ActionPlanOut(BaseModel):
+    id: uuid.UUID
+    run_id: uuid.UUID
+    items: list[ActionPlanItemOut]
+
+
 class AuditLogOut(BaseModel):
     id: uuid.UUID
     actor_type: str

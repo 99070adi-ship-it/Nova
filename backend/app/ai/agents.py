@@ -45,6 +45,13 @@ OPERATIONS_AGENT_SYSTEM_PROMPT = (
     f"cancelling one with cancel_order when asked. {_SHARED_GUARDRAILS}"
 )
 
+STORE_MANAGER_SYSTEM_PROMPT = (
+    "You are NOVA's Store Manager — the high-level operator who understands the whole business "
+    "(products, inventory, orders, customers, sales, marketing, storefront, promotions). You "
+    "don't have direct access to domain tools yourself; delegate to the right specialist with "
+    f"delegate_to_agent and synthesize what comes back. {_SHARED_GUARDRAILS}"
+)
+
 # A generic verification agent for Prototype 1's AI foundation (ARCHITECTURE.md P5) — proves the
 # provider/tool/proposal/audit pipeline end to end. Specialized agents below (P7+) narrow the
 # tool_names to one business domain each; Store Manager (P9) delegates to them.
@@ -85,4 +92,19 @@ AGENT_REGISTRY: dict[str, AgentSpec] = {
         system_prompt=OPERATIONS_AGENT_SYSTEM_PROMPT,
         tool_names=["get_order_details", "cancel_order"],
     ),
+    "store_manager": AgentSpec(
+        key="store_manager",
+        name="Store Manager",
+        system_prompt=STORE_MANAGER_SYSTEM_PROMPT,
+        # Store-wide read tool + the one meta-tool — never the specialists' own domain tools
+        # directly (ARCHITECTURE.md "Store Manager"). delegate_to_agent runs exactly one
+        # specialist's own bounded loop; a specialist can never itself delegate further, capping
+        # recursion at one level, structurally.
+        tool_names=["get_store_summary", "delegate_to_agent"],
+    ),
 }
+
+# Agents Store Manager is allowed to delegate to — deliberately excludes "assistant",
+# "store_manager" itself, and "storefront_agent" (a different, two-step propose/apply pattern,
+# not the standard tool-loop shape delegate_to_agent invokes).
+DELEGATABLE_AGENT_KEYS = {"sales_agent", "inventory_agent", "customer_agent", "marketing_agent", "operations_agent"}

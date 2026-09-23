@@ -8,9 +8,9 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.agent_loop import run_agent
-from app.ai.agents import AGENT_REGISTRY
+from app.ai.agents import AGENT_REGISTRY, DELEGATABLE_AGENT_KEYS
 from app.ai.factory import build_llm_provider
-from app.ai.provider import ToolCallRequest, ToolResultMessage
+from app.ai.provider import LLMProvider, ToolCallRequest, ToolResultMessage
 from app.config import get_settings
 from app.db.models import AgentRunStatus, AIConversation
 from app.errors import NotFoundError, ValidationDomainError
@@ -50,6 +50,28 @@ async def get_conversation_or_404(db: AsyncSession, org_id: uuid.UUID, conversat
     return conversation
 
 
+async def run_specialized_agent(db: AsyncSession, org_id: uuid.UUID, *, agent_key: str, instruction: str, provider: LLMProvider) -> dict:
+    """Runs exactly one specialized agent's own bounded loop (ARCHITECTURE.md "Store Manager") —
+    used both by delegate_to_agent (conversational delegation) and by the Store Health / Action
+    Plan flows below. The delegated-to agent's own tool_names never include delegate_to_agent
+    itself, so recursion is capped at one level structurally, not by convention."""
+
+    spec = AGENT_REGISTRY[agent_key]
+    run = await ai_repo.create_agent_run(db, org_id, agent_key=spec.key, trigger="delegated")
+    result = await run_agent(
+        provider, system_prompt=spec.system_prompt, context={}, messages=[instruction],
+        tool_names=spec.tool_names, read_only_executor=_make_read_only_executor(db, org_id),
+        mutating_executor=_make_mutating_executor(db, org_id, run.id), max_round_trips=settings.tool_loop_max_round_trips,
+    )
+    final_text = result.final.text if result.final is not None else "No final answer within the step limit."
+    await ai_repo.complete_agent_run(
+        db, run, status=AgentRunStatus.completed, prompt_tokens=result.prompt_tokens,
+        completion_tokens=result.completion_tokens, hit_loop_cap=result.hit_loop_cap,
+        result_json={"instruction": instruction, "tool_call_log": result.tool_call_log},
+    )
+    return {"agent_key": agent_key, "run_id": str(run.id), "final_text": final_text, "tool_call_log": result.tool_call_log}
+
+
 def _make_read_only_executor(db: AsyncSession, org_id: uuid.UUID):
     async def _execute(call: ToolCallRequest) -> ToolResultMessage:
         if call.name == "get_brand_profile":
@@ -81,6 +103,13 @@ def _make_read_only_executor(db: AsyncSession, org_id: uuid.UUID):
                 {"error": "not_found"} if order is None else
                 {"id": str(order.id), "status": order.status.value, "payment_status": order.payment_status.value, "total": float(order.total), "items": len(order.items)}
             )
+        elif call.name == "delegate_to_agent":
+            target_key = call.arguments.get("agent_key")
+            instruction = call.arguments.get("instruction", "")
+            if target_key not in DELEGATABLE_AGENT_KEYS:
+                content = {"error": "not_delegatable", "agent_key": target_key}
+            else:
+                content = await run_specialized_agent(db, org_id, agent_key=target_key, instruction=instruction, provider=build_llm_provider())
         else:
             content = {"error": "unknown_read_tool"}
         return ToolResultMessage(tool_call_id=call.id, name=call.name, content=content)

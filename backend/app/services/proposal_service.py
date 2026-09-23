@@ -154,7 +154,13 @@ _EXECUTORS = {
 }
 
 
-async def approve_and_execute_proposal(db: AsyncSession, org_id: uuid.UUID, proposal_id: uuid.UUID, *, approving_user_id: uuid.UUID) -> ToolProposal:
+async def approve_and_execute_proposal(
+    db: AsyncSession, org_id: uuid.UUID, proposal_id: uuid.UUID, *, approving_user_id: uuid.UUID | None = None,
+) -> ToolProposal:
+    """approving_user_id is None for system-driven auto-execution (AgentActionPlan items flagged
+    auto_executable=True) — same state machine, payload-hash re-verification, and audit trail as a
+    human approval, just with the audit actor recorded as `system` instead of `user`."""
+
     proposal = await proposal_repo.get_proposal(db, org_id, proposal_id)
     if proposal is None:
         raise ConflictError("Proposal not found")
@@ -176,8 +182,8 @@ async def approve_and_execute_proposal(db: AsyncSession, org_id: uuid.UUID, prop
     if approved is None:
         raise ConflictError("Proposal was resolved concurrently", details={"status": "already_resolved"})
     await write_audit_event(
-        db, org_id=org_id, actor_type=AuditActorType.user, actor_id=approving_user_id, action="tool_proposal.approved",
-        entity_type="tool_proposal", entity_id=proposal_id, after={},
+        db, org_id=org_id, actor_type=AuditActorType.user if approving_user_id else AuditActorType.system,
+        actor_id=approving_user_id, action="tool_proposal.approved", entity_type="tool_proposal", entity_id=proposal_id, after={},
     )
 
     executing = await proposal_repo.try_transition(

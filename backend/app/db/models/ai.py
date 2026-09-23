@@ -124,3 +124,17 @@ class AIAgentRun(Base, UUIDPKMixin, TimestampMixin):
     completion_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     hit_loop_cap: Mapped[bool] = mapped_column(nullable=False, default=False)
     result_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+
+class AgentActionPlan(Base, UUIDPKMixin, TimestampMixin):
+    """"Fix what you can" — one reviewable unit grouping several proposed/auto-executed actions
+    (ARCHITECTURE.md "AI Action Plans"). `items` is a JSONB list of
+    {tool_name, risk, auto_executable, status, proposal_id?}; each sensitive item still resolves
+    through its own ToolProposal row — this table only tracks the group."""
+
+    __tablename__ = "agent_action_plans"
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
+    agent_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ai_agent_runs.id"), nullable=False, index=True)
+    created_by: Mapped[str] = mapped_column(String(50), nullable=False, default="store_manager")
+    items: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)

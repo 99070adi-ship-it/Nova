@@ -59,6 +59,11 @@ class GetOrderDetailsArgs(BaseModel):
     order_id: str
 
 
+class DelegateToAgentArgs(BaseModel):
+    agent_key: Literal["sales_agent", "inventory_agent", "customer_agent", "marketing_agent", "operations_agent"]
+    instruction: str = Field(min_length=1, max_length=500)
+
+
 @dataclass(frozen=True)
 class ToolSpec:
     name: str
@@ -138,6 +143,13 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
         name="get_order_details",
         description="Look up an order's status, payment status, and items by id.",
         args_model=GetOrderDetailsArgs,
+        is_mutating=False,
+        risk_classification=None,
+    ),
+    "delegate_to_agent": ToolSpec(
+        name="delegate_to_agent",
+        description="Delegate a task to one specialized agent (sales_agent, inventory_agent, customer_agent, marketing_agent, or operations_agent) and get back its findings.",
+        args_model=DelegateToAgentArgs,
         is_mutating=False,
         risk_classification=None,
     ),

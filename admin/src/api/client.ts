@@ -524,4 +524,45 @@ export async function getCustomerActivity(inactiveDays = 30) {
   return apiFetch<CustomerActivityRow[]>(`/analytics/customers?inactive_days=${inactiveDays}`);
 }
 
+// ---- Store Manager ----
+
+export interface StoreHealthFinding {
+  category: "sales" | "inventory" | "products" | "customers" | "storefront" | "marketing" | "operations";
+  metric: string;
+  status: "good" | "watch" | "at_risk";
+  finding: string;
+  severity: "low" | "medium" | "high";
+  evidence: Record<string, unknown>;
+  suggested_action: string | null;
+}
+
+export interface StoreHealthReport {
+  run_id: string;
+  findings: StoreHealthFinding[];
+  narrative: Record<string, string>;
+}
+
+export interface ActionPlanItem {
+  tool_name: string;
+  risk: "low" | "high";
+  auto_executable: boolean;
+  status: string;
+  proposal_id: string;
+  description: string;
+}
+
+export interface ActionPlan {
+  id: string;
+  run_id: string;
+  items: ActionPlanItem[];
+}
+
+export async function getStoreHealth() {
+  return apiFetch<StoreHealthReport>("/store-manager/health", { method: "POST" });
+}
+
+export async function createActionPlan() {
+  return apiFetch<ActionPlan>("/store-manager/action-plan", { method: "POST" });
+}
+
 export { API_BASE_URL };

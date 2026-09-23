@@ -1,4 +1,5 @@
 from app.db.models.ai import (
+    AgentActionPlan,
     AgentRunStatus,
     AIAgentRun,
     AIConversation,
@@ -31,6 +32,7 @@ from app.db.models.storefront import GeneratedBy, StorePage, StoreSection, Store
 from app.db.models.user import RefreshToken, User, UserRole
 
 __all__ = [
+    "AgentActionPlan",
     "AIAgentRun",
     "AIConversation",
     "AIMessage",
