@@ -69,3 +69,14 @@ export async function listProducts() {
 export async function getProduct(slug: string) {
   return apiFetch<Product>(`/products/${slug}`);
 }
+
+export type EventType = "page_view" | "product_view" | "collection_view" | "add_to_cart" | "hero_click";
+
+export function recordEvent(eventType: EventType, productSlug?: string) {
+  // Fire-and-forget — analytics must never block or break the browsing experience.
+  fetch(`${API_BASE_URL}/public/stores/${ORG_SLUG}/events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ event_type: eventType, product_slug: productSlug ?? null }),
+  }).catch(() => {});
+}

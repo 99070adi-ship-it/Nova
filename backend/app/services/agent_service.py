@@ -14,7 +14,7 @@ from app.ai.provider import ToolCallRequest, ToolResultMessage
 from app.config import get_settings
 from app.db.models import AgentRunStatus, AIConversation
 from app.errors import NotFoundError, ValidationDomainError
-from app.repositories import ai_repo, product_repo, store_creation_repo
+from app.repositories import ai_repo, analytics_repo, product_repo, store_creation_repo
 from app.services import proposal_service
 
 settings = get_settings()
@@ -66,6 +66,14 @@ def _make_read_only_executor(db: AsyncSession, org_id: uuid.UUID):
                 content = {k: v for k, v in full.items() if not fields or k in fields}
         elif call.name == "get_store_summary":
             content = await ai_repo.get_store_summary(db, org_id)
+        elif call.name == "get_sales_metrics":
+            days = call.arguments.get("days") or 30
+            content = await analytics_repo.get_sales_summary(db, org_id, days=days)
+        elif call.name == "get_low_stock_products":
+            content = {"low_stock_products": await analytics_repo.get_low_stock_products(db, org_id)}
+        elif call.name == "get_customer_activity":
+            inactive_days = call.arguments.get("inactive_days") or 30
+            content = {"customers": await analytics_repo.get_customer_activity(db, org_id, inactive_days=inactive_days)}
         else:
             content = {"error": "unknown_read_tool"}
         return ToolResultMessage(tool_call_id=call.id, name=call.name, content=content)

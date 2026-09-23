@@ -8,7 +8,7 @@ Tool schemas deliberately never include org_id/user_id — there is nothing for 
 from dataclasses import dataclass
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class GetBrandProfileArgs(BaseModel):
@@ -17,6 +17,18 @@ class GetBrandProfileArgs(BaseModel):
 
 class GetStoreSummaryArgs(BaseModel):
     pass
+
+
+class GetSalesMetricsArgs(BaseModel):
+    days: int = Field(default=30, gt=0, le=365)
+
+
+class GetLowStockProductsArgs(BaseModel):
+    pass
+
+
+class GetCustomerActivityArgs(BaseModel):
+    inactive_days: int = Field(default=30, gt=0, le=365)
 
 
 class UpdateProductContentArgs(BaseModel):
@@ -54,6 +66,27 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
         name="get_store_summary",
         description="Get counts of products, customers, orders, and low-stock inventory for the org's store.",
         args_model=GetStoreSummaryArgs,
+        is_mutating=False,
+        risk_classification=None,
+    ),
+    "get_sales_metrics": ToolSpec(
+        name="get_sales_metrics",
+        description="Get revenue, order count, and top-selling products over the last N days.",
+        args_model=GetSalesMetricsArgs,
+        is_mutating=False,
+        risk_classification=None,
+    ),
+    "get_low_stock_products": ToolSpec(
+        name="get_low_stock_products",
+        description="List products/variants at or below their low-stock threshold.",
+        args_model=GetLowStockProductsArgs,
+        is_mutating=False,
+        risk_classification=None,
+    ),
+    "get_customer_activity": ToolSpec(
+        name="get_customer_activity",
+        description="List customers with their order counts and last-order date, flagging those inactive for N+ days.",
+        args_model=GetCustomerActivityArgs,
         is_mutating=False,
         risk_classification=None,
     ),

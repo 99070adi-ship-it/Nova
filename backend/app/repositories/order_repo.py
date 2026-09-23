@@ -26,6 +26,11 @@ async def get_variant_price(db: AsyncSession, variant_id: uuid.UUID) -> float | 
     return result.scalar_one_or_none()
 
 
+async def get_variant_product_id(db: AsyncSession, variant_id: uuid.UUID) -> uuid.UUID | None:
+    result = await db.execute(select(ProductVariant.product_id).where(ProductVariant.id == variant_id))
+    return result.scalar_one_or_none()
+
+
 async def create_order(db: AsyncSession, org_id: uuid.UUID, *, customer_id: uuid.UUID, items: list[dict]) -> Order:
     total = sum(item["unit_price"] * item["quantity"] for item in items)
     order = Order(

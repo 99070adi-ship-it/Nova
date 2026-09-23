@@ -9,6 +9,7 @@ from app.db.models.ai import (
     RiskClassification,
     ToolProposal,
 )
+from app.db.models.analytics import AnalyticsEvent, AnalyticsEventType, SalesMetricDaily
 from app.db.models.collection import Collection, CollectionProduct, CollectionProductCreatedBy
 from app.db.models.customer import Customer
 from app.db.models.inventory import Inventory, InventoryLocation, InventoryMovement
@@ -34,6 +35,8 @@ __all__ = [
     "AIConversation",
     "AIMessage",
     "AgentRunStatus",
+    "AnalyticsEvent",
+    "AnalyticsEventType",
     "AuditActorType",
     "AuditLog",
     "BrandProfile",
@@ -63,6 +66,7 @@ __all__ = [
     "ProposalStatus",
     "RefreshToken",
     "RiskClassification",
+    "SalesMetricDaily",
     "Store",
     "StoreCreationSession",
     "StoreCreationStatus",

@@ -2,6 +2,13 @@ import uuid
 
 from pydantic import BaseModel
 
+from app.db.models import AnalyticsEventType
+
+
+class RecordEvent(BaseModel):
+    event_type: AnalyticsEventType
+    product_slug: str | None = None
+
 
 class PublicVariant(BaseModel):
     id: uuid.UUID

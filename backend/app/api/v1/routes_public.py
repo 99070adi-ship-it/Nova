@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.schemas.public import PublicCollection, PublicPage, PublicProduct, PublicSection, PublicStorefront
-from app.services import public_service
+from app.schemas.public import PublicCollection, PublicPage, PublicProduct, PublicSection, PublicStorefront, RecordEvent
+from app.services import analytics_service, public_service
 
 router = APIRouter()
 
@@ -53,3 +53,9 @@ async def get_collection(org_slug: str, collection_id: uuid.UUID, db: AsyncSessi
     org = await public_service.get_org_by_slug_or_404(db, org_slug)
     collection, ids = await public_service.get_collection_or_404(db, org.id, collection_id)
     return PublicCollection(id=collection.id, title=collection.title, slug=collection.slug, description=collection.description, product_ids=ids)
+
+
+@router.post("/stores/{org_slug}/events", status_code=204)
+async def record_event(org_slug: str, payload: RecordEvent, db: AsyncSession = Depends(get_db)) -> None:
+    org = await public_service.get_org_by_slug_or_404(db, org_slug)
+    await analytics_service.record_public_event(db, org.id, event_type=payload.event_type, product_slug=payload.product_slug)

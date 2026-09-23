@@ -3,6 +3,7 @@ import AppLayout from "./components/AppLayout";
 import { useAuth } from "./lib/auth";
 import ActivityPage from "./pages/ActivityPage";
 import AIWorkspacePage from "./pages/AIWorkspacePage";
+import AnalyticsPage from "./pages/AnalyticsPage";
 import ApprovalsPage from "./pages/ApprovalsPage";
 import CreateMyStorePage from "./pages/CreateMyStorePage";
 import CustomersPage from "./pages/CustomersPage";
@@ -39,7 +40,7 @@ export default function App() {
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/marketing" element={<PlaceholderPage title="Marketing" phase="P8" />} />
-        <Route path="/analytics" element={<PlaceholderPage title="Analytics" phase="P7" />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/ai-workspace" element={<AIWorkspacePage />} />
         <Route path="/store-builder" element={<StoreBuilderPage />} />
         <Route path="/approvals" element={<ApprovalsPage />} />

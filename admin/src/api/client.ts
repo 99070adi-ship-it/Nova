@@ -456,4 +456,46 @@ export async function listActivity() {
   return apiFetch<AuditLogEntry[]>("/activity");
 }
 
+// ---- Analytics ----
+
+export interface TopProduct {
+  title: string;
+  revenue: number;
+  units: number;
+}
+
+export interface SalesSummary {
+  revenue: number;
+  orders: number;
+  top_products: TopProduct[];
+  days: number;
+}
+
+export interface LowStockProduct {
+  title: string;
+  sku: string;
+  on_hand: number;
+  low_stock_threshold: number;
+}
+
+export interface CustomerActivityRow {
+  name: string;
+  email: string;
+  order_count: number;
+  last_order_at: string | null;
+  inactive: boolean;
+}
+
+export async function getSalesSummary(days = 30) {
+  return apiFetch<SalesSummary>(`/analytics/sales?days=${days}`);
+}
+
+export async function getLowStockProducts() {
+  return apiFetch<LowStockProduct[]>("/analytics/low-stock");
+}
+
+export async function getCustomerActivity(inactiveDays = 30) {
+  return apiFetch<CustomerActivityRow[]>(`/analytics/customers?inactive_days=${inactiveDays}`);
+}
+
 export { API_BASE_URL };

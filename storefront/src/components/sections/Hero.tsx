@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { recordEvent } from "../../api/client";
 
 interface Props {
   configuration: Record<string, unknown>;
@@ -15,7 +16,11 @@ export default function Hero({ configuration }: Props) {
       <h1 className="text-4xl font-semibold tracking-tight">{headline}</h1>
       {subheadline && <p className="mt-3 text-lg text-neutral-500">{subheadline}</p>}
       {ctaText && (
-        <Link to={ctaHref === "/shop" ? "/products" : ctaHref} className="mt-8 rounded-full bg-neutral-900 px-6 py-3 text-sm font-medium text-white">
+        <Link
+          to={ctaHref === "/shop" ? "/products" : ctaHref}
+          onClick={() => recordEvent("hero_click")}
+          className="mt-8 rounded-full bg-neutral-900 px-6 py-3 text-sm font-medium text-white"
+        >
           {ctaText}
         </Link>
       )}

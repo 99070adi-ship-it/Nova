@@ -1,10 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { getStorefront } from "../api/client";
+import { useEffect } from "react";
+import { getStorefront, recordEvent } from "../api/client";
 import SectionRenderer from "../components/SectionRenderer";
 import StoreHeader from "../components/StoreHeader";
 
 export default function HomePage() {
   const { data: storefront, isLoading, error } = useQuery({ queryKey: ["storefront"], queryFn: getStorefront });
+
+  useEffect(() => {
+    recordEvent("page_view");
+  }, []);
 
   if (isLoading) return <p className="p-6 text-sm text-neutral-400">Loading…</p>;
   if (error || !storefront) {

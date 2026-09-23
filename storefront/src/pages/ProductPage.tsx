@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getProduct, getStorefront } from "../api/client";
+import { getProduct, getStorefront, recordEvent } from "../api/client";
 import StoreHeader from "../components/StoreHeader";
 
 export default function ProductPage() {
@@ -11,6 +12,11 @@ export default function ProductPage() {
     queryFn: () => getProduct(slug!),
     enabled: !!slug,
   });
+  const [added, setAdded] = useState(false);
+
+  useEffect(() => {
+    if (slug) recordEvent("product_view", slug);
+  }, [slug]);
 
   return (
     <div>
@@ -26,7 +32,15 @@ export default function ProductPage() {
               {product.category && <p className="mt-1 text-sm text-neutral-500">{product.category}</p>}
               <p className="mt-4 text-xl">${product.variants[0]?.price.toFixed(2)}</p>
               {product.description && <p className="mt-4 text-sm text-neutral-600">{product.description}</p>}
-              <button className="mt-6 w-full rounded-full bg-neutral-900 px-6 py-3 text-sm font-medium text-white">Add to cart</button>
+              <button
+                onClick={() => {
+                  recordEvent("add_to_cart", slug);
+                  setAdded(true);
+                }}
+                className="mt-6 w-full rounded-full bg-neutral-900 px-6 py-3 text-sm font-medium text-white"
+              >
+                {added ? "Added ✓" : "Add to cart"}
+              </button>
             </div>
           </div>
         )}
