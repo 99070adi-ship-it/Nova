@@ -21,6 +21,9 @@ export interface LessonStep {
   demoPrompt: string;
   explainPrompt: string;
   completePrompt: string;
+  /** See useNovaLesson.ts's NovaLessonConfig — for a step needing a second real action from the
+   * user before it's genuinely complete (only nl_edit today: propose, then separately apply). */
+  midTurnSpotlightTarget?: string;
 }
 
 export const LESSON_STEPS: LessonStep[] = [
@@ -99,8 +102,12 @@ export const LESSON_STEPS: LessonStep[] = [
       { type: "spotlight", target: "nl_edit_form.propose" },
     ],
     demoPrompt: "I'm about to show the user how to ask NOVA to change their storefront in plain language. Narrate it briefly.",
-    explainPrompt: "Explain briefly that NOVA proposes a change plan first — nothing customers see changes until the owner reviews and applies it.",
-    completePrompt: "The user just asked NOVA to improve their storefront. Congratulate them briefly and tell them what's next.",
+    explainPrompt: "Explain briefly that NOVA proposes a change plan first — nothing customers see changes until the owner reviews it and explicitly applies it to the draft themselves. Tell them to press Propose, read what NOVA plans to change, then press Apply to draft once they're happy with it.",
+    completePrompt: "The user just reviewed and applied NOVA's proposed storefront change. Congratulate them briefly and tell them what's next.",
+    // Once the user's own Propose click produces a real plan, "Apply to draft" exists in the DOM
+    // for the first time — NOVA spotlights it so the second real action is just as guided as the
+    // first, even though NOVA itself never clicks either button.
+    midTurnSpotlightTarget: "nl_edit_form.apply",
   },
   {
     key: "publish",

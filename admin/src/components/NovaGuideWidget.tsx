@@ -82,6 +82,7 @@ function LessonRunner({
       return progress.steps.find((s) => s.key === step.key)?.status === "completed";
     },
     completeNarration: () => narrate(step.completePrompt),
+    midTurnSpotlightTarget: step.midTurnSpotlightTarget,
   });
 
   useEffect(() => {

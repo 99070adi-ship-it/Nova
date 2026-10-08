@@ -1,3 +1,5 @@
+import uuid
+
 from app.ai.agents import DELEGATABLE_AGENT_KEYS
 
 
@@ -8,6 +10,29 @@ async def _auth_headers(client, seeded_owner):
 
 def _status_by_key(progress: dict) -> dict:
     return {s["key"]: s["status"] for s in progress["steps"]}
+
+
+async def _get_progress(client, headers):
+    res = await client.get("/api/v1/onboarding/progress", headers=headers)
+    return _status_by_key(res.json()), res.json()["current_step"]
+
+
+async def _advance_to_nl_edit_step(client, headers) -> None:
+    """Shared setup for the nl_edit-apply-gating tests below — walks through every prior step
+    (already individually verified by test_progress_advances_step_by_step_through_the_real_flow
+    above) without re-asserting each one, just to reach "nl_edit available" quickly."""
+    await client.post("/api/v1/store-creation/start", headers=headers)
+    await client.put("/api/v1/store-creation/brand-input", json={"name": "Aurora Goods"}, headers=headers)
+    draft_res = await client.post(
+        "/api/v1/store-creation/product-drafts",
+        json={"title": "Aurora Tote", "price": 128, "sku": "AUR-TOTE-1"},
+        headers=headers,
+    )
+    draft_id = draft_res.json()["id"]
+    await client.post(f"/api/v1/store-creation/product-drafts/{draft_id}/generate", headers=headers)
+    await client.post(f"/api/v1/store-creation/product-drafts/{draft_id}/accept", headers=headers)
+    await client.post("/api/v1/collections", json={"title": "New Arrivals", "slug": "new-arrivals"}, headers=headers)
+    await client.post("/api/v1/store-creation/generate-storefront", headers=headers)
 
 
 async def test_progress_starts_all_locked_except_brand(client, seeded_owner):
@@ -90,8 +115,17 @@ async def test_progress_advances_step_by_step_through_the_real_flow(client, seed
     assert statuses["preview"] == "completed"
     assert current == "nl_edit"
 
-    # Step 8 — natural-language change plan.
-    await client.post("/api/v1/storefront/change-plan", json={"instruction": "add a story about us"}, headers=headers)
+    # Step 8 — natural-language change plan: proposing alone must NOT complete this step.
+    propose_res = await client.post(
+        "/api/v1/storefront/change-plan", json={"instruction": "add a story about us"}, headers=headers
+    )
+    statuses, current = await progress()
+    assert statuses["nl_edit"] == "available"
+    assert current == "nl_edit"
+
+    # Only actually applying the plan completes it.
+    agent_run_id = propose_res.json()["agent_run_id"]
+    await client.post(f"/api/v1/storefront/change-plan/{agent_run_id}/apply", headers=headers)
     statuses, current = await progress()
     assert statuses["nl_edit"] == "completed"
     assert current == "publish"
@@ -112,6 +146,80 @@ async def test_progress_advances_step_by_step_through_the_real_flow(client, seed
     statuses, current = await progress()
     assert statuses["run_business"] == "completed"
     assert current is None
+
+
+async def test_nl_edit_proposing_alone_never_completes_the_step(client, seeded_owner):
+    headers = await _auth_headers(client, seeded_owner)
+    await _advance_to_nl_edit_step(client, headers)
+
+    await client.post(
+        "/api/v1/storefront/change-plan", json={"instruction": "make the hero feel more premium"}, headers=headers
+    )
+    statuses, current = await _get_progress(client, headers)
+    assert statuses["nl_edit"] == "available"
+    assert current == "nl_edit"
+
+    # Proposing a SECOND time (e.g. the owner revises their instruction) still doesn't complete
+    # it — only an actual apply does.
+    await client.post(
+        "/api/v1/storefront/change-plan", json={"instruction": "try again, warmer tone"}, headers=headers
+    )
+    statuses, current = await _get_progress(client, headers)
+    assert statuses["nl_edit"] == "available"
+    assert current == "nl_edit"
+
+
+async def test_nl_edit_a_failed_apply_leaves_the_step_incomplete(client, seeded_owner):
+    headers = await _auth_headers(client, seeded_owner)
+    await _advance_to_nl_edit_step(client, headers)
+
+    await client.post(
+        "/api/v1/storefront/change-plan", json={"instruction": "make the hero feel more premium"}, headers=headers
+    )
+    statuses, _ = await _get_progress(client, headers)
+    assert statuses["nl_edit"] == "available"
+
+    # Applying a run that doesn't exist (or doesn't belong to this org) must fail, not silently
+    # count as success.
+    bogus_run_id = str(uuid.uuid4())
+    fail_res = await client.post(f"/api/v1/storefront/change-plan/{bogus_run_id}/apply", headers=headers)
+    assert fail_res.status_code >= 400
+
+    statuses, current = await _get_progress(client, headers)
+    assert statuses["nl_edit"] == "available"
+    assert current == "nl_edit"
+
+
+async def test_nl_edit_a_successful_apply_completes_the_step(client, seeded_owner):
+    headers = await _auth_headers(client, seeded_owner)
+    await _advance_to_nl_edit_step(client, headers)
+
+    propose_res = await client.post(
+        "/api/v1/storefront/change-plan", json={"instruction": "make the hero feel more premium"}, headers=headers
+    )
+    agent_run_id = propose_res.json()["agent_run_id"]
+
+    apply_res = await client.post(f"/api/v1/storefront/change-plan/{agent_run_id}/apply", headers=headers)
+    assert apply_res.status_code == 200
+
+    statuses, current = await _get_progress(client, headers)
+    assert statuses["nl_edit"] == "completed"
+    assert current == "publish"
+
+
+async def test_nl_edit_refreshing_or_navigating_away_never_falsely_completes_the_step(client, seeded_owner):
+    # Re-querying progress repeatedly (simulating a page refresh / navigating to another page and
+    # back) must never advance the step on its own — only the real backend mutation does.
+    headers = await _auth_headers(client, seeded_owner)
+    await _advance_to_nl_edit_step(client, headers)
+
+    await client.post(
+        "/api/v1/storefront/change-plan", json={"instruction": "make the hero feel more premium"}, headers=headers
+    )
+    for _ in range(5):
+        statuses, current = await _get_progress(client, headers)
+        assert statuses["nl_edit"] == "available"
+        assert current == "nl_edit"
 
 
 async def test_nova_guide_is_a_real_agent_that_reads_real_progress(client, seeded_owner):

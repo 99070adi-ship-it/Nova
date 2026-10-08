@@ -90,12 +90,18 @@ async def test_golden_path_signup_through_run_business(client):
     assert steps_by_key["storefront"] == OnboardingStepStatus.completed.value
     assert steps_by_key["preview"] == OnboardingStepStatus.completed.value
 
-    # 8. NL edit — Ask NOVA proposes a Change Plan (applying it is a separate, optional action;
-    # onboarding only requires the plan to have been proposed).
+    # 8. NL edit — Ask NOVA proposes a Change Plan. Proposing alone does NOT complete this step —
+    # only actually applying the plan to the draft does.
     change_plan_res = await client.post(
         "/api/v1/storefront/change-plan", json={"instruction": "make the hero feel more premium"}, headers=headers
     )
     assert change_plan_res.status_code == 201
+    assert (await progress())["current_step"] == "nl_edit"
+
+    apply_res = await client.post(
+        f"/api/v1/storefront/change-plan/{change_plan_res.json()['agent_run_id']}/apply", headers=headers
+    )
+    assert apply_res.status_code == 200
     assert (await progress())["current_step"] == "publish"
 
     # 9. Publish.

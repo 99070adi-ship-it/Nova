@@ -175,6 +175,7 @@ function AskNovaPanel() {
               </p>
               <div className="mt-2 flex gap-2">
                 <button
+                  data-nova-target="nl_edit_form.apply"
                   onClick={() => applyMutation.mutate()}
                   disabled={applyMutation.isPending}
                   className="rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white"

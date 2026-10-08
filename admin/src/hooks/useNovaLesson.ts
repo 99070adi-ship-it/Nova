@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { type UIAction, runUIActions } from "../lib/novaUiActions";
+import { type UIAction, getTarget, runUIActions } from "../lib/novaUiActions";
 
 /** The exact loop NOVA 2.0's Guide redesign asks for: NOVA demonstrates (never persisting a real
  * mutation itself), explains why, hands control to the user, verifies the user's own real result
@@ -15,6 +15,13 @@ export interface NovaLessonConfig {
   /** Polled while phase === "user_turn". Must check real, persisted state — never client state. */
   verify: () => Promise<boolean>;
   completeNarration: () => Promise<string>;
+  /** Optional — for a user_turn that needs more than one real action from the user (e.g.
+   * nl_edit: propose a Change Plan, then separately apply it). Checked on the same poll cadence
+   * as `verify`; the instant this target actually exists in the DOM (meaning the user's first
+   * real action already succeeded and produced it — e.g. the "Apply to draft" button only
+   * rendering once a real plan exists), NOVA spotlights it so the user knows what to do next,
+   * without ever clicking it for them. */
+  midTurnSpotlightTarget?: string;
   pollMs?: number;
   /** Milliseconds paced between each demo action — tunable so tests don't need real wall-clock
    * seconds; production code relies on the default. */
@@ -55,6 +62,11 @@ export function useNovaLesson(config: NovaLessonConfig) {
     let cancelled = false;
 
     const interval = setInterval(async () => {
+      if (config.midTurnSpotlightTarget && !cancelled) {
+        const el = getTarget(config.midTurnSpotlightTarget);
+        setSpotlightRect(el ? el.getBoundingClientRect() : null);
+      }
+
       let verified = false;
       try {
         verified = await config.verify();
@@ -64,6 +76,7 @@ export function useNovaLesson(config: NovaLessonConfig) {
       if (verified && !cancelled) {
         cancelled = true;
         clearInterval(interval);
+        setSpotlightRect(null);
         setPhase("verifying");
         try {
           setMessage(await config.completeNarration());

@@ -39,9 +39,7 @@ async def _step_completions(db: AsyncSession, org_id: uuid.UUID) -> dict[Onboard
     collections = await collection_repo.list_collections(db, org_id)
     storefront_draft = await storefront_repo.get_draft(db, org_id)
     storefront_live = await storefront_repo.get_live(db, org_id)
-    has_change_plan = await ai_repo.has_completed_agent_run(
-        db, org_id, agent_key="storefront_agent", trigger="propose_change_plan"
-    )
+    has_applied_change_plan = await ai_repo.has_applied_change_plan(db, org_id)
     has_store_health_run = await ai_repo.has_completed_agent_run(db, org_id, agent_key="store_manager", trigger="store_health")
     has_action_plan = await ai_repo.has_action_plan(db, org_id)
 
@@ -57,7 +55,7 @@ async def _step_completions(db: AsyncSession, org_id: uuid.UUID) -> dict[Onboard
         OnboardingStepKey.storefront: storefront_draft is not None,
         # No state of its own — previewing is just viewing the draft step 6 already produced.
         OnboardingStepKey.preview: storefront_draft is not None,
-        OnboardingStepKey.nl_edit: has_change_plan,
+        OnboardingStepKey.nl_edit: has_applied_change_plan,
         OnboardingStepKey.publish: storefront_live is not None,
         OnboardingStepKey.run_business: has_store_health_run and has_action_plan,
     }

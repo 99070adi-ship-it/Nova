@@ -103,4 +103,24 @@ describe("useNovaLesson — demo -> explain -> user_turn -> verify -> complete",
     await waitFor(() => expect(result.current.phase).toBe("user_turn"));
     expect(config.demoNarration).toHaveBeenCalledTimes(1);
   });
+
+  it("spotlights midTurnSpotlightTarget once it appears in the DOM during user_turn, for a step needing a second real action", async () => {
+    const config = baseConfig({ midTurnSpotlightTarget: "nl_edit_form.apply", pollMs: 10 });
+    const { result } = renderHook(() => useNovaLesson(config));
+
+    await act(async () => {
+      await result.current.start();
+    });
+    await waitFor(() => expect(result.current.phase).toBe("user_turn"));
+    expect(result.current.spotlightRect).toBeNull(); // the target doesn't exist yet
+
+    // Simulates the user's first real action (e.g. Propose) succeeding and rendering the
+    // second button for the first time.
+    const applyButton = document.createElement("button");
+    applyButton.setAttribute("data-nova-target", "nl_edit_form.apply");
+    document.body.appendChild(applyButton);
+
+    await waitFor(() => expect(result.current.spotlightRect).not.toBeNull());
+    applyButton.remove();
+  });
 });

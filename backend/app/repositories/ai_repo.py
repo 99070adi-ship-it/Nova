@@ -110,6 +110,26 @@ async def has_completed_agent_run(db: AsyncSession, org_id: uuid.UUID, *, agent_
     return (await db.execute(stmt)).scalar_one() > 0
 
 
+async def has_applied_change_plan(db: AsyncSession, org_id: uuid.UUID) -> bool:
+    """Onboarding's nl_edit step (ARCHITECTURE.md "Onboarding — the NOVA Guide") requires more
+    than a proposed Change Plan — it must have actually been applied to the draft.
+    `storefront_agent_service.apply_change_plan` sets `result_json["applied"] = True` on the same
+    run row `propose_change_plan` completed (never a separate trigger), so unlike
+    `has_completed_agent_run` above (existence/status only), this also inspects the persisted
+    result — a completed run whose plan was merely proposed or rendered, never applied, must not
+    count."""
+
+    result = await db.execute(
+        select(AIAgentRun.result_json).where(
+            AIAgentRun.org_id == org_id,
+            AIAgentRun.agent_key == "storefront_agent",
+            AIAgentRun.trigger == "propose_change_plan",
+            AIAgentRun.status == AgentRunStatus.completed,
+        )
+    )
+    return any(row is not None and row.get("applied") is True for row in result.scalars().all())
+
+
 async def has_action_plan(db: AsyncSession, org_id: uuid.UUID) -> bool:
     count = (
         await db.execute(select(func.count()).select_from(AgentActionPlan).where(AgentActionPlan.org_id == org_id))
