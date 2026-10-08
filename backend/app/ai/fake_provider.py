@@ -113,12 +113,33 @@ def _deterministic_pseudo_embedding(text: str, dimensions: int = 1536) -> list[f
 
 def _synthesize_lesson_narration(message: str) -> str | None:
     """Deterministic stand-in for the active, demonstration-driven Guide lessons (NOVA 2.0's
-    Guide redesign — FirstProductLesson.tsx): the lesson sends a fixed, distinctive prompt per
-    phase, matched here by substring. A real provider would answer these same prompts from its
-    own reasoning; this produces a plain-English equivalent deterministically, same spirit as
-    _synthesize_guide_narration above."""
+    Guide redesign — admin/src/lib/novaLessons.ts's eight-step registry): each lesson sends a
+    fixed, distinctive prompt per phase (demo/explain/complete), matched here by substring. A real
+    provider would answer these same prompts from its own reasoning; this produces a plain-English
+    equivalent deterministically, same spirit as _synthesize_guide_narration above. Every lesson
+    needs its own three matchers here — a prompt with no match falls through to the generic
+    tool-calling path below, which answers a completely different (and wrong) question, so this
+    dict must stay in sync with novaLessons.ts whenever a lesson's prompt text changes or a new
+    lesson is added."""
 
     text = message.lower()
+
+    if "demonstrate describing a brand" in text:
+        return (
+            "Watch me first — I'll fill in Velora's name, who it sells to, and its positioning "
+            "and vibe, using the brand's own real details, then clear the form so you can enter "
+            "it yourself."
+        )
+    if "fits the brand" in text:
+        return (
+            "NOVA can't invent a brand's identity — name, audience, positioning, and vibe are "
+            "facts only the owner can confirm. Everything NOVA builds afterward is shaped by "
+            "what you enter here. Your turn — fill in the brand details and press Continue to "
+            "products."
+        )
+    if "described their brand successfully" in text:
+        return "Nicely done — Velora's brand identity is saved. NOVA will use it for everything else it builds, starting with your first product."
+
     if "demonstrate adding a product" in text:
         return (
             "Watch me first — I'll fill in a product's name, price, SKU, and category, then "
@@ -132,6 +153,93 @@ def _synthesize_lesson_narration(message: str) -> str | None:
         )
     if "added their own product successfully" in text:
         return "Nicely done — that's a real product now. NOVA can generate the rest whenever you're ready."
+
+    if "generate content for their new product" in text:
+        return (
+            "Watch me first — I'll point to Generate content on your new product. NOVA writes a "
+            "description and SEO copy from what you've told it, but never touches price or SKU."
+        )
+    if "what generating content does" in text:
+        return (
+            "Price and SKU are facts only you know, so NOVA leaves them exactly as you typed "
+            "them — it only generates the parts it can reasonably infer, like description and "
+            "SEO copy. Your turn — press Generate content on your product."
+        )
+    if "generated content for the user's product" in text:
+        return "Nicely done — NOVA generated real content for your product. Next, review it and decide whether to accept it."
+
+    if "review and accept nova's generated content" in text:
+        return "Watch me first — I'll point to Accept on your product's generated content."
+    if "why the owner reviews and accepts" in text:
+        return (
+            "Accepting turns NOVA's generated draft into a real, live product in your catalog — "
+            "nothing becomes final until you say so. Your turn — review the content and press "
+            "Accept."
+        )
+    if "user just accepted their product" in text:
+        return "Nicely done — that's a real product in your catalog now. Next, NOVA will build your storefront from your brand and this product."
+
+    if "generate their storefront" in text:
+        return (
+            "Watch me first — I'll point to Generate storefront, which builds a homepage from "
+            "Velora's brand and your accepted products."
+        )
+    if "build a homepage from their brand" in text:
+        return (
+            "NOVA builds a real homepage — hero, product grid, and brand story — grounded in "
+            "what you've already told it, not a generic template. You can still edit everything "
+            "afterward in Store Builder. Your turn — press Generate storefront."
+        )
+    if "generated the user's storefront" in text:
+        return "Nicely done — your storefront draft now exists. Next, let's ask NOVA to improve it in plain language."
+
+    if "change their storefront in plain language" in text:
+        return (
+            "Watch me first — I'll type a plain-language request, like asking NOVA to make the "
+            "hero feel more premium, then point to Propose."
+        )
+    if "proposes a change plan first" in text:
+        return (
+            "NOVA never changes your storefront on its own — Propose shows you a plan first, "
+            "and nothing customers see changes until you explicitly press Apply to draft. Your "
+            "turn — describe a change, press Propose, review the plan, then press Apply to "
+            "draft."
+        )
+    if "reviewed and applied nova's proposed storefront change" in text:
+        return "Nicely done — NOVA's change is now on your draft. Next, let's publish your store so customers can see it."
+
+    if "publish their storefront live" in text:
+        return (
+            "Watch me first — I'll point to Publish, the one step that makes your draft visible "
+            "to real customers."
+        )
+    if "publishing is the one step" in text:
+        return (
+            "Until you publish, customers only ever see whatever was live before — your edits "
+            "stay safely on the draft. Your turn — press Publish when you're ready to go live."
+        )
+    if "user just published their store" in text:
+        return "Nicely done — Velora is live. Next, let's see NOVA actually run the business."
+
+    if "how nova checks on how their store is doing" in text:
+        return (
+            "Watch me first — I'll point to \"How is my store doing?\", which has Store Manager "
+            "delegate to real Sales, Inventory, and Customer agents."
+        )
+    if "store manager delegates to sales, inventory, and customer agents" in text:
+        return (
+            "Store Manager doesn't guess — it delegates to specialized agents that check your "
+            "real sales, inventory, and customer data, then \"Fix what you can\" lets NOVA act on "
+            "what it finds, with anything sensitive routed to Approvals for your review. Your "
+            "turn — press \"How is my store doing?\", then press \"Fix what you can\"."
+        )
+    if "saw nova analyze their business and act on it" in text:
+        return (
+            "Nicely done — you just watched NOVA analyze and act on a real business. This is the "
+            "end of the guided tour — I'm always here from the chat bubble in the corner for "
+            "anything else."
+        )
+
     return None
 
 

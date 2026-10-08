@@ -22,6 +22,7 @@ interface DockRect {
 }
 
 const PHASE_LABEL: Record<string, string> = {
+  idle: "GETTING READY",
   demo: "DEMONSTRATING",
   explain: "EXPLAINING",
   user_turn: "YOUR TURN",
@@ -177,12 +178,12 @@ function LessonRunner({
             <p className="text-[11px] font-medium uppercase tracking-wide text-amber-600">
               {PHASE_LABEL[lesson.phase] ?? ""}
             </p>
-            <p className="mt-0.5 text-sm text-neutral-700">{lesson.message ?? "Let's get started."}</p>
+            <p className="mt-0.5 text-sm text-neutral-700">{lesson.message ?? step.title}</p>
           </div>
         </div>
         {stepIndex >= 0 && (
           <p className="mt-3 border-t border-neutral-100 pt-2 text-[11px] font-medium text-neutral-400">
-            Step {stepIndex + 1} of {LESSON_STEPS.length} — {step.key.replace("_", " ")}
+            Step {stepIndex + 1} of {LESSON_STEPS.length} — {step.title}
           </p>
         )}
       </div>

@@ -13,6 +13,10 @@ import type { UIAction } from "./novaUiActions";
  */
 export interface LessonStep {
   key: string;
+  /** Mirrors backend/app/services/onboarding_service.py's _STEP_TITLES exactly — shown
+   * immediately as the Guide's stated objective (NOVA 2.0 Guide redesign, checklist item 1)
+   * before any narration call has even resolved, so there's never a silent/unexplained moment. */
+  title: string;
   /** The route this step's real UI lives on — the widget navigates here first if the visitor
    * isn't already on it, so the whole ten-step tour reads as one continuous flow regardless of
    * which page a step's real action happens to live on. */
@@ -29,6 +33,7 @@ export interface LessonStep {
 export const LESSON_STEPS: LessonStep[] = [
   {
     key: "brand",
+    title: "Tell NOVA about your business",
     path: "/create-store",
     demoActions: [
       { type: "spotlight", target: "brand_form.name" },
@@ -53,6 +58,7 @@ export const LESSON_STEPS: LessonStep[] = [
   },
   {
     key: "products",
+    title: "Add your products",
     path: "/create-store",
     demoActions: [
       { type: "spotlight", target: "product_form.title" },
@@ -71,6 +77,7 @@ export const LESSON_STEPS: LessonStep[] = [
   },
   {
     key: "catalog",
+    title: "NOVA builds your catalog",
     path: "/create-store",
     demoActions: [{ type: "spotlight", target: "draft_form.generate_first" }],
     demoPrompt: "I'm about to show the user how to have NOVA generate content for their new product. Narrate it briefly.",
@@ -79,6 +86,7 @@ export const LESSON_STEPS: LessonStep[] = [
   },
   {
     key: "review",
+    title: "Review AI-generated content",
     path: "/create-store",
     demoActions: [{ type: "spotlight", target: "draft_form.accept_first" }],
     demoPrompt: "I'm about to show the user how to review and accept NOVA's generated content. Narrate it briefly.",
@@ -87,6 +95,7 @@ export const LESSON_STEPS: LessonStep[] = [
   },
   {
     key: "storefront",
+    title: "Build your storefront",
     path: "/create-store",
     demoActions: [{ type: "spotlight", target: "storefront_gen.generate" }],
     demoPrompt: "I'm about to show the user how to have NOVA generate their storefront. Narrate it briefly.",
@@ -95,6 +104,7 @@ export const LESSON_STEPS: LessonStep[] = [
   },
   {
     key: "nl_edit",
+    title: "Ask NOVA to improve it",
     path: "/store-builder",
     demoActions: [
       { type: "spotlight", target: "nl_edit_form.instruction" },
@@ -111,6 +121,7 @@ export const LESSON_STEPS: LessonStep[] = [
   },
   {
     key: "publish",
+    title: "Publish your store",
     path: "/store-builder",
     demoActions: [{ type: "spotlight", target: "publish_form.publish" }],
     demoPrompt: "I'm about to show the user how to publish their storefront live. Narrate it briefly.",
@@ -119,6 +130,7 @@ export const LESSON_STEPS: LessonStep[] = [
   },
   {
     key: "run_business",
+    title: "Learn how NOVA runs your business",
     path: "/overview",
     demoActions: [{ type: "spotlight", target: "store_health.check" }],
     demoPrompt: "I'm about to show the user how NOVA checks on how their store is doing. Narrate it briefly.",
