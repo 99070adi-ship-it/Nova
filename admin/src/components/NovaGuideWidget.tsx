@@ -9,10 +9,17 @@ import NovaFace from "./NovaFace";
 import NovaSpotlight from "./NovaSpotlight";
 
 const SPRING_EASING = "cubic-bezier(0.34, 1.56, 0.64, 1)";
-const BOX_TRANSITION = `left 550ms ${SPRING_EASING}, top 550ms ${SPRING_EASING}`;
+const BOX_MOVE_TRANSITION = `left 550ms ${SPRING_EASING}, top 550ms ${SPRING_EASING}, width 550ms ${SPRING_EASING}`;
 const MARGIN = 24;
 const BOX_WIDTH = 320;
 const BOX_HEIGHT_ESTIMATE = 150;
+
+interface DockRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
 
 const PHASE_LABEL: Record<string, string> = {
   demo: "DEMONSTRATING",
@@ -50,19 +57,32 @@ function boxPosition(rect: DOMRect | null): { left: number; top: number } {
 /** Runs one lesson step to completion against the real page (navigating there first if needed),
  * then calls onDone — see hooks/useNovaLesson.ts for the demo -> explain -> user_turn -> verify ->
  * complete state machine this drives. A fresh instance mounts per step (NovaGuideWidget keys it
- * by step.key), so each step gets its own clean run. */
+ * by step.key), so each step gets its own clean run.
+ *
+ * Spatial continuity: `dockOrigin` is the real bottom-right launcher's last measured position —
+ * on mount, the box paints there first (no transition), then two animation frames later animates
+ * to its real spotlight-relative target, so it visibly springs out from the exact launcher it
+ * came from rather than just appearing. The mirror image happens on genuine completion: once
+ * `lesson.phase === "complete"` and the brief beat on the completion message has played, the box
+ * animates back down to that same dock position/size before `onDone` actually swaps it out for
+ * the real docked bubble — it never retracts just because the page navigated, since navigation
+ * doesn't touch `lesson.phase` at all. */
 function LessonRunner({
   step,
   conversationId,
+  dockOrigin,
   onDone,
 }: {
   step: LessonStep;
   conversationId: React.MutableRefObject<string | null>;
+  dockOrigin: DockRect | null;
   onDone: () => void;
 }) {
   const navigate = useNavigate();
   const location = useLocation();
   const startedRef = useRef(false);
+  const [springingIn, setSpringingIn] = useState(!!dockOrigin);
+  const [retracting, setRetracting] = useState(false);
 
   async function narrate(prompt: string): Promise<string> {
     if (!conversationId.current) {
@@ -101,22 +121,52 @@ function LessonRunner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Spring-in: painted at the dock's exact position/size on the first frame (no transition —
+  // nothing to animate yet, it just needs to start there), then two frames later flips to false,
+  // which switches the rendered left/top/width to the real target with the transition now active,
+  // so the browser animates smoothly from the launcher to wherever the lesson needs it.
+  const rafRef = useRef(0);
+  useEffect(() => {
+    if (!dockOrigin) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = requestAnimationFrame(() => setSpringingIn(false));
+    });
+    return () => cancelAnimationFrame(rafRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (lesson.phase !== "complete") return;
-    const timer = setTimeout(onDone, 2200);
-    return () => clearTimeout(timer);
+    const beatTimer = setTimeout(() => setRetracting(true), 2200);
+    return () => clearTimeout(beatTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.phase]);
 
-  const pos = boxPosition(lesson.spotlightRect);
+  useEffect(() => {
+    if (!retracting) return;
+    // Matches BOX_MOVE_TRANSITION's duration — only actually swap to the docked bubble once the
+    // retract animation has had time to finish playing.
+    const timer = setTimeout(onDone, 600);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retracting]);
+
+  const atDock = (retracting || springingIn) && dockOrigin;
+  const pos = atDock ? { left: dockOrigin.left, top: dockOrigin.top } : boxPosition(lesson.spotlightRect);
+  const width = atDock ? dockOrigin.width : BOX_WIDTH;
   const stepIndex = LESSON_STEPS.findIndex((s) => s.key === step.key);
 
   return (
     <>
-      <NovaSpotlight rect={lesson.spotlightRect} />
+      <NovaSpotlight rect={retracting ? null : lesson.spotlightRect} />
       <div
-        className="nova-bounce-in fixed z-50 w-80 rounded-lg border border-neutral-200 bg-white p-4 shadow-xl"
-        style={{ left: pos.left, top: pos.top, transition: BOX_TRANSITION }}
+        className="fixed z-50 overflow-hidden rounded-lg border border-neutral-200 bg-white p-4 shadow-xl"
+        style={{
+          left: pos.left,
+          top: pos.top,
+          width,
+          transition: springingIn ? "none" : BOX_MOVE_TRANSITION,
+        }}
       >
         <div className="flex items-start gap-3">
           <NovaFace
@@ -160,6 +210,15 @@ export default function NovaGuideWidget() {
   const guideConversationId = useRef<string | null>(null);
   const faqConversationId = useRef<string | null>(null);
   const [activeStepKey, setActiveStepKey] = useState<string | null>(null);
+  // The real launcher button's last-measured position/size — captured while it's actually
+  // mounted (docked), reused as both the spring-out's origin and the retract's target, since the
+  // launcher itself unmounts for the whole time a lesson is active and can't be re-measured then.
+  const dockRectRef = useRef<DockRect | null>(null);
+  const measureDock = (el: HTMLButtonElement | null) => {
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    dockRectRef.current = { left: r.left, top: r.top, width: r.width, height: r.height };
+  };
 
   const { data: progress } = useQuery({
     queryKey: ["onboarding-progress"],
@@ -197,6 +256,7 @@ export default function NovaGuideWidget() {
       <LessonRunner
         step={activeStep}
         conversationId={guideConversationId}
+        dockOrigin={dockRectRef.current}
         onDone={() => {
           setActiveStepKey(null);
           void queryClient.invalidateQueries({ queryKey: ["onboarding-progress"] });
@@ -239,6 +299,7 @@ export default function NovaGuideWidget() {
         </div>
       )}
       <button
+        ref={measureDock}
         onClick={() => setFaqOpen((o) => !o)}
         className="flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-600 shadow-lg hover:bg-neutral-50"
       >

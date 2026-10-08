@@ -74,4 +74,32 @@ describe("NovaGuideWidget — docked chat bubble that bounces into the active gu
     expect(screen.queryByText("Ask me anything")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByText(/Step 1 of \d+/)).toBeInTheDocument(), { timeout: 10000 });
   }, 15000);
+
+  it("retracts back to the dock only once the lesson is genuinely complete — never merely from time passing", async () => {
+    let completed = false;
+    vi.mocked(getOnboardingProgress).mockImplementation(() =>
+      Promise.resolve({
+        steps: [{ key: "brand", title: "Tell NOVA about your business", status: completed ? "completed" : "available" }],
+        current_step: completed ? null : "brand",
+        intro_video_seen: true,
+      } as never),
+    );
+
+    renderWidget("/overview");
+
+    await waitFor(() => expect(screen.getByText(/Step 1 of \d+/)).toBeInTheDocument(), { timeout: 10000 });
+    expect(screen.queryByText("Ask me anything")).not.toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByText("YOUR TURN")).toBeInTheDocument(), { timeout: 10000 });
+    // Real backend state still says incomplete — waiting here, however long, must never retract
+    // on its own.
+    await new Promise((r) => setTimeout(r, 500));
+    expect(screen.queryByText("Ask me anything")).not.toBeInTheDocument();
+
+    completed = true; // only now does the real backend state actually change
+    await waitFor(() => expect(screen.getByText("DONE")).toBeInTheDocument(), { timeout: 10000 });
+    expect(screen.queryByText("Ask me anything")).not.toBeInTheDocument(); // still mid-retract beat
+
+    await waitFor(() => expect(screen.getByText("Ask me anything")).toBeInTheDocument(), { timeout: 10000 });
+  }, 30000);
 });

@@ -45,17 +45,3 @@ body {
 .nova-pop-in {
   animation: nova-pop-in 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
-
-/* NovaGuideWidget — NOVA lives docked as a small chat bubble bottom-right until a tutorial step
-   starts, at which point it physically bounces up off the dock and becomes the full guide box
-   (more overshoot than nova-pop-in above — this one's meant to read as "arriving", not a subtle
-   settle), then floats to track whatever it's currently spotlighting for the rest of that step. */
-@keyframes nova-bounce-in {
-  0% { opacity: 0; transform: scale(0.3) translateY(60px); }
-  45% { opacity: 1; transform: scale(1.08) translateY(-14px); }
-  70% { transform: scale(0.96) translateY(4px); }
-  100% { opacity: 1; transform: scale(1) translateY(0); }
-}
-.nova-bounce-in {
-  animation: nova-bounce-in 650ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
-}
