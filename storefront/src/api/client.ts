@@ -5,7 +5,14 @@
  */
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8100/api/v1";
-const ORG_SLUG = import.meta.env.VITE_ORG_SLUG ?? "velora";
+
+// A real single-tenant deployment would set VITE_ORG_SLUG at build time and never need this —
+// but the admin app's demo/portfolio workspace is per-visitor isolated (backend/app/services/
+// demo_service.py's create_isolated_demo_workspace: a unique org per visitor, not the one fixed
+// "velora" dev fixture), so admin links to this app always carry `?org=<the visitor's own real
+// slug>` (lib/storefrontUrl.ts). Read once at module load — correct for the whole SPA session,
+// since client-side navigation within this app never needs to change which org is being viewed.
+const ORG_SLUG = new URLSearchParams(window.location.search).get("org") ?? import.meta.env.VITE_ORG_SLUG ?? "velora";
 
 export class ApiError extends Error {
   status: number;

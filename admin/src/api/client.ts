@@ -52,6 +52,7 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
 export interface CurrentUser {
   id: string;
   org_id: string;
+  org_slug: string;
   email: string;
   full_name: string;
   role: "owner" | "staff";

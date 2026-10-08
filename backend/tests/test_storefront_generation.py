@@ -144,6 +144,56 @@ async def test_generate_then_preview_and_publish_still_works(client, seeded_owne
     assert live_sections == draft_sections
 
 
+async def test_generate_then_preview_then_publish_then_public_live_fetch_all_resolve_by_the_real_org_slug(client, seeded_owner):
+    # Regression for the browser-reported 404: generate -> open draft preview -> publish -> open
+    # the live storefront must all resolve correctly, and "open the live storefront" specifically
+    # means the PUBLIC, unauthenticated endpoint the separate customer-facing storefront SPA
+    # actually calls (by org slug) — not just the authenticated admin /storefront/live endpoint,
+    # which test_generate_then_preview_and_publish_still_works above already covers. The real bug
+    # was never in this backend path (it was the admin app linking the storefront SPA to a
+    # hardcoded default slug instead of the signed-in user's own real one) — this test pins down
+    # that the backend side of the full flow has always been, and remains, correct by the real
+    # slug a frontend would actually use.
+    headers = await _auth_headers(client, seeded_owner)
+    org_slug = seeded_owner["org_slug"]
+
+    # /me's org_slug (what the admin frontend actually uses to build the live storefront link)
+    # must be the visitor's own real slug.
+    me_res = await client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.json()["org_slug"] == org_slug
+
+    await client.post("/api/v1/store-creation/start", headers=headers)
+    await client.put("/api/v1/store-creation/brand-input", json={"name": "Preview Co"}, headers=headers)
+    generate_res = await client.post("/api/v1/store-creation/generate-storefront", headers=headers)
+    assert generate_res.status_code == 200
+
+    draft = (await client.get("/api/v1/storefront/draft", headers=headers)).json()
+
+    # Open draft preview — publicly readable by the draft's own id, no slug needed.
+    preview_res = await client.get(f"/api/v1/public/preview/{draft['id']}")
+    assert preview_res.status_code == 200
+
+    # Before publishing, the public live-by-slug endpoint has nothing to show yet.
+    public_live_before = await client.get(f"/api/v1/public/stores/{org_slug}/storefront")
+    assert public_live_before.status_code == 404
+
+    publish_res = await client.post("/api/v1/storefront/publish", headers=headers)
+    assert publish_res.status_code == 200
+
+    # Open the live storefront — the real customer-facing path, by the real org slug.
+    public_live_after = await client.get(f"/api/v1/public/stores/{org_slug}/storefront")
+    assert public_live_after.status_code == 200
+    section_types = [s["type"] for s in public_live_after.json()["pages"][0]["sections"]]
+    assert "hero" in section_types
+
+    # The published version genuinely renders what was generated, not a stale/different draft —
+    # compared by (type, configuration), not raw dicts: publishing snapshots fresh rows (new ids)
+    # and the public schema never exposes ids at all.
+    public_sections = [(s["type"], s["configuration"]) for s in public_live_after.json()["pages"][0]["sections"]]
+    draft_sections = [(s["type"], s["configuration"]) for s in draft["pages"][0]["sections"]]
+    assert public_sections == draft_sections
+
+
 async def test_change_plan_propose_then_apply(client, seeded_owner):
     headers = await _auth_headers(client, seeded_owner)
     await client.post("/api/v1/store-creation/start", headers=headers)

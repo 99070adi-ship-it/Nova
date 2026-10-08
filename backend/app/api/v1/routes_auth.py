@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.core.deps import AuthContext, get_current_context
 from app.db.session import get_db
-from app.repositories import user_repo
+from app.repositories import storefront_repo, user_repo
 from app.services import auth_service
 
 router = APIRouter()
@@ -36,6 +36,7 @@ class TokenResponse(BaseModel):
 class MeResponse(BaseModel):
     id: str
     org_id: str
+    org_slug: str
     email: str
     full_name: str
     role: str
@@ -105,4 +106,9 @@ async def logout(request: Request, response: Response, db: AsyncSession = Depend
 async def me(ctx: AuthContext = Depends(get_current_context), db: AsyncSession = Depends(get_db)) -> MeResponse:
     user = await user_repo.get_user_by_id(db, org_id=ctx.org_id, user_id=ctx.user_id)
     assert user is not None  # get_current_context already verified this user is active
-    return MeResponse(id=str(user.id), org_id=str(user.org_id), email=user.email, full_name=user.full_name, role=user.role.value)
+    org = await storefront_repo.get_org_by_id(db, ctx.org_id)
+    assert org is not None  # the user's own org_id always refers to a real, existing org
+    return MeResponse(
+        id=str(user.id), org_id=str(user.org_id), org_slug=org.slug,
+        email=user.email, full_name=user.full_name, role=user.role.value,
+    )

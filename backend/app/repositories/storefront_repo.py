@@ -60,6 +60,11 @@ async def get_org_by_slug(db: AsyncSession, slug: str) -> Organization | None:
     return result.scalar_one_or_none()
 
 
+async def get_org_by_id(db: AsyncSession, org_id: uuid.UUID) -> Organization | None:
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    return result.scalar_one_or_none()
+
+
 async def get_section_in_draft(db: AsyncSession, org_id: uuid.UUID, section_id: uuid.UUID) -> StoreSection | None:
     result = await db.execute(
         select(StoreSection)

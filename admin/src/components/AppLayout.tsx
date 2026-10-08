@@ -4,11 +4,15 @@ import clsx from "clsx";
 import NovaGuideWidget from "./NovaGuideWidget";
 import { getOnboardingProgress } from "../api/client";
 import { useAuth } from "../lib/auth";
+import { liveStorefrontUrl } from "../lib/storefrontUrl";
 
 interface NavItem {
   label: string;
   to: string;
   external?: boolean;
+  /** The one external link whose href depends on the signed-in user's own org slug — computed
+   * at render time (see AppLayout's own render) rather than baked into this static list. */
+  isLiveStorefrontLink?: boolean;
 }
 
 interface NavGroup {
@@ -42,7 +46,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Store",
     items: [
-      { label: "Storefront", to: "http://localhost:5174/", external: true },
+      { label: "Storefront", to: "http://localhost:5174/", external: true, isLiveStorefrontLink: true },
       { label: "Store Builder", to: "/store-builder" },
     ],
   },
@@ -92,7 +96,7 @@ export default function AppLayout() {
                   item.external ? (
                     <a
                       key={item.to}
-                      href={item.to}
+                      href={item.isLiveStorefrontLink ? liveStorefrontUrl(user?.org_slug) : item.to}
                       target="_blank"
                       rel="noreferrer"
                       className="block rounded-md px-2 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100"

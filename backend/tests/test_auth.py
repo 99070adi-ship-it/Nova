@@ -71,6 +71,21 @@ async def test_me_requires_token(client):
     assert res.status_code == 401
 
 
+async def test_me_returns_the_users_own_real_org_slug(client, seeded_owner):
+    # Regression for the storefront 404 browser QA found: the admin app's "live site" link needs
+    # the signed-in user's own real org slug (lib/storefrontUrl.ts) to point the separate
+    # storefront SPA at the right org — not a hardcoded default that only ever matched the one
+    # fixed dev fixture before per-visitor demo isolation (Phase 0) existed.
+    res = await client.post(
+        "/api/v1/auth/login", json={"email": seeded_owner["email"], "password": seeded_owner["password"]}
+    )
+    headers = {"Authorization": f"Bearer {res.json()['access_token']}"}
+
+    me_res = await client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    assert me_res.json()["org_slug"] == seeded_owner["org_slug"]
+
+
 async def test_full_auth_flow(client, seeded_owner):
     login_res = await client.post(
         "/api/v1/auth/login", json={"email": seeded_owner["email"], "password": seeded_owner["password"]}

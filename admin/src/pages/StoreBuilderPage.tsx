@@ -14,6 +14,8 @@ import {
   updateSection,
   updateTheme,
 } from "../api/client";
+import { useAuth } from "../lib/auth";
+import { STOREFRONT_ORIGIN, liveStorefrontUrl } from "../lib/storefrontUrl";
 
 const SECTION_LABELS: Record<string, string> = {
   hero: "Hero",
@@ -200,6 +202,7 @@ function AskNovaPanel() {
 
 export default function StoreBuilderPage() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { data: draft, isLoading } = useQuery({ queryKey: ["storefront-draft"], queryFn: getStorefrontDraft });
   const { data: diff } = useQuery({ queryKey: ["storefront-diff"], queryFn: getStorefrontDiff });
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -243,9 +246,8 @@ export default function StoreBuilderPage() {
 
   if (isLoading || !draft) return <p className="text-sm text-neutral-400">Loading…</p>;
   const page = draft.pages[0];
-  const storefrontOrigin = "http://localhost:5174";
-  const previewUrl = `${storefrontOrigin}/?preview=${draft.id}`;
-  const liveUrl = `${storefrontOrigin}/`;
+  const previewUrl = `${STOREFRONT_ORIGIN}/?preview=${draft.id}`;
+  const liveUrl = liveStorefrontUrl(user?.org_slug);
 
   return (
     <div>
