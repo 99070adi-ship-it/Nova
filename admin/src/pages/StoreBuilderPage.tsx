@@ -92,6 +92,12 @@ function SectionEditor({ section, pageId }: { section: StoreSection; pageId: str
   );
 }
 
+function affectedArea(item: ChangePlan["plan"][number]): string {
+  if (item.action === "add_section") return `Homepage → new ${item.section_type ?? "?"} section`;
+  if (item.action === "update_theme") return "Homepage → theme";
+  return "Nothing";
+}
+
 function AskNovaPanel() {
   const queryClient = useQueryClient();
   const [instruction, setInstruction] = useState("");
@@ -132,12 +138,18 @@ function AskNovaPanel() {
         className="mt-3 flex gap-2"
       >
         <input
+          data-nova-target="nl_edit_form.instruction"
           value={instruction}
           onChange={(e) => setInstruction(e.target.value)}
           placeholder="e.g. make it feel more premium"
           className="flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
         />
-        <button type="submit" disabled={proposeMutation.isPending} className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100">
+        <button
+          data-nova-target="nl_edit_form.propose"
+          type="submit"
+          disabled={proposeMutation.isPending}
+          className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100"
+        >
           {proposeMutation.isPending ? "Thinking…" : "Propose"}
         </button>
       </form>
@@ -145,24 +157,40 @@ function AskNovaPanel() {
 
       {plan && (
         <div className="mt-3 rounded-md border border-neutral-200 bg-neutral-50 p-3">
-          <p className="text-xs font-medium text-neutral-500">Change plan</p>
-          <ul className="mt-1 space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">What will change</p>
+          <ul className="mt-2 space-y-2">
             {plan.plan.map((item, i) => (
               <li key={i} className="text-xs text-neutral-700">
-                • {item.description}
+                <p>{item.description}</p>
+                <p className="mt-0.5 text-neutral-400">Affected: {affectedArea(item)}</p>
               </li>
             ))}
           </ul>
-          {!plan.applied && plan.plan.some((i) => i.action !== "none") && (
-            <button
-              onClick={() => applyMutation.mutate()}
-              disabled={applyMutation.isPending}
-              className="mt-3 rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white"
-            >
-              {applyMutation.isPending ? "Applying…" : "Apply changes"}
-            </button>
+
+          {plan.plan.some((i) => i.action !== "none") && !plan.applied && (
+            <>
+              <p className="mt-3 border-t border-neutral-200 pt-2 text-[11px] text-neutral-400">
+                Draft only — nothing customers see changes until you publish. Apply it, then use
+                "Preview draft" above to see it as a customer would before you decide to publish.
+              </p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  onClick={() => applyMutation.mutate()}
+                  disabled={applyMutation.isPending}
+                  className="rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white"
+                >
+                  {applyMutation.isPending ? "Applying…" : "Apply to draft"}
+                </button>
+                <button
+                  onClick={() => setPlan(null)}
+                  className="rounded-md border border-neutral-300 px-3 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-100"
+                >
+                  Discard
+                </button>
+              </div>
+            </>
           )}
-          {plan.applied && <p className="mt-2 text-xs text-emerald-600">Applied to draft.</p>}
+          {plan.applied && <p className="mt-2 text-xs text-emerald-600">Applied to draft — use "Preview draft" above to see it.</p>}
         </div>
       )}
     </div>
@@ -214,17 +242,28 @@ export default function StoreBuilderPage() {
 
   if (isLoading || !draft) return <p className="text-sm text-neutral-400">Loading…</p>;
   const page = draft.pages[0];
-  const previewUrl = "http://localhost:5174/";
+  const storefrontOrigin = "http://localhost:5174";
+  const previewUrl = `${storefrontOrigin}/?preview=${draft.id}`;
+  const liveUrl = `${storefrontOrigin}/`;
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
+    <div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
       <div>
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-semibold">Store Builder</h1>
-          <a href={previewUrl} target="_blank" rel="noreferrer" className="text-sm text-neutral-500 hover:underline">
-            Open storefront ↗
-          </a>
+          <div className="flex items-center gap-4 text-sm">
+            <a href={previewUrl} target="_blank" rel="noreferrer" className="font-medium text-neutral-900 hover:underline">
+              Preview draft ↗
+            </a>
+            <a href={liveUrl} target="_blank" rel="noreferrer" className="text-neutral-500 hover:underline">
+              View live site ↗
+            </a>
+          </div>
         </div>
+        <p className="mt-1 text-xs text-neutral-400">
+          You're editing the <span className="font-medium text-neutral-600">draft</span> — nothing customers see changes until you publish.
+        </p>
 
         <div className="mt-4 space-y-3">
           {page.sections
@@ -283,6 +322,7 @@ export default function StoreBuilderPage() {
             ))}
           </ul>
           <button
+            data-nova-target="publish_form.publish"
             onClick={() => publishMutation.mutate()}
             disabled={publishMutation.isPending}
             className="mt-4 w-full rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white"
@@ -292,6 +332,7 @@ export default function StoreBuilderPage() {
           {publishedOk && <p className="mt-2 text-xs text-emerald-600">Published.</p>}
           {publishError && <p className="mt-2 text-xs text-red-600">{publishError}</p>}
         </div>
+      </div>
       </div>
     </div>
   );

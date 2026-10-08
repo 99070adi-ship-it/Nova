@@ -62,6 +62,18 @@ export async function getStorefront() {
   return apiFetch<Storefront>("/storefront");
 }
 
+// Draft preview — a different, unauthenticated-by-design endpoint keyed by the version's own id,
+// not the org slug (ARCHITECTURE.md "Real store preview"). Store Builder links here so a merchant
+// can see their unpublished draft rendered exactly as a customer would, before publishing.
+export async function getStorefrontPreview(versionId: string) {
+  const res = await fetch(`${API_BASE_URL}/public/preview/${versionId}`);
+  const body = await res.json();
+  if (!res.ok) {
+    throw new ApiError(res.status, body?.error?.message ?? "Request failed");
+  }
+  return body as Storefront;
+}
+
 export async function listProducts() {
   return apiFetch<Product[]>("/products");
 }

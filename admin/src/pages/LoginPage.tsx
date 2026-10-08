@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { useAuth } from "../lib/auth";
+import { DEMO_CREDENTIALS } from "../lib/demo";
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, enterDemo } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("owner@velora.demo");
-  const [password, setPassword] = useState("changeme123");
+  const [email, setEmail] = useState(DEMO_CREDENTIALS.email);
+  const [password, setPassword] = useState(DEMO_CREDENTIALS.password);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -16,7 +17,17 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email, password);
+      // The prefilled demo credentials, submitted unmodified, go through the dedicated
+      // reset-to-blank demo entry (backend/app/services/demo_service.py::reset_to_blank_demo)
+      // instead of plain login — this is what guarantees the account exists at all on a fresh
+      // deployment, and that every demo sign-in replays the full setup experience from scratch,
+      // same as the request behind this: "every time someone logs in with it, it shows the whole
+      // demo flow." Any other email/password still goes through ordinary login, unchanged.
+      if (email === DEMO_CREDENTIALS.email && password === DEMO_CREDENTIALS.password) {
+        await enterDemo();
+      } else {
+        await login(email, password);
+      }
       navigate("/overview");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed");
@@ -66,7 +77,12 @@ export default function LoginPage() {
             {submitting ? "Signing in…" : "Sign in"}
           </button>
         </form>
-        <p className="mt-4 text-center text-xs text-neutral-400">Demo: owner@velora.demo / changeme123</p>
+        <p className="mt-4 text-center text-xs text-neutral-400">
+          New to NOVA?{" "}
+          <Link to="/signup" className="font-medium text-neutral-600 underline">
+            Create an account
+          </Link>
+        </p>
       </div>
     </div>
   );

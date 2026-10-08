@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -18,6 +18,13 @@ _REFRESH_COOKIE_PATH = "/api/v1/auth"
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class SignupRequest(BaseModel):
+    org_name: str = Field(min_length=1, max_length=200)
+    full_name: str = Field(min_length=1, max_length=200)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=200)
 
 
 class TokenResponse(BaseModel):
@@ -49,6 +56,29 @@ def _set_refresh_cookie(response: Response, raw_token: str) -> None:
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     result = await auth_service.login(db, email=payload.email, password=payload.password)
+    _set_refresh_cookie(response, result.refresh_token)
+    return TokenResponse(access_token=result.access_token, expires_in=result.expires_in)
+
+
+@router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+async def signup(payload: SignupRequest, response: Response, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+    result = await auth_service.signup(
+        db, org_name=payload.org_name, email=payload.email, password=payload.password, full_name=payload.full_name,
+    )
+    _set_refresh_cookie(response, result.refresh_token)
+    return TokenResponse(access_token=result.access_token, expires_in=result.expires_in)
+
+
+@router.post("/demo-login", response_model=TokenResponse)
+async def demo_login(response: Response, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+    """Public, unauthenticated, no form to fill in — resets the shared demo identity to a blank
+    org and logs straight into it (NOVA 2.0 "no sign up or sign in" checkpoint). This is a
+    destructive, whole-database wipe on every call — deliberately so, and deliberately
+    unauthenticated; see demo_service.reset_to_blank_demo's docstring for the tradeoff this
+    accepts. Never add real multi-tenant data to this deployment without reconsidering this
+    endpoint first."""
+
+    result = await auth_service.enter_demo(db)
     _set_refresh_cookie(response, result.refresh_token)
     return TokenResponse(access_token=result.access_token, expires_in=result.expires_in)
 

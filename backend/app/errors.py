@@ -44,6 +44,26 @@ class StaleProposalError(DomainError):
     code = "stale_proposal"
 
 
+class AIProviderError(DomainError):
+    """Raised whenever an `LLMProvider` implementation (Fake/NVIDIA/OpenAI) fails — network error,
+    rate limit, timeout, malformed response, anything. Deliberately carries no detail from the
+    underlying exception: providers are untrusted, unreliable external dependencies, and nothing
+    about their failure mode (API keys, stack traces, vendor error text) should ever reach the
+    frontend. Distinct from ValidationDomainError (bad input), ConflictError/StaleProposalError
+    (state machine violations), and ForbiddenError (auth) — this is specifically "the AI service
+    itself didn't respond," which the caller could plausibly retry later."""
+
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    code = "ai_provider_unavailable"
+
+    def __init__(self, details: dict | None = None):
+        super().__init__(
+            "NOVA couldn't complete this step because the AI service is temporarily unavailable. "
+            "Your store data and existing changes are safe.",
+            details=details,
+        )
+
+
 def _envelope(code: str, message: str, details: dict | None = None) -> dict:
     return {"error": {"code": code, "message": message, "details": details or {}}}
 

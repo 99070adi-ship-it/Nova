@@ -11,8 +11,37 @@ from app.db.models import (
 )
 from app.errors import ConflictError, NotFoundError, ValidationDomainError
 from app.repositories import inventory_repo, product_repo, store_creation_repo
-from app.schemas.store_creation import PRODUCT_DRAFT_FIELD_NAMES
+from app.schemas.store_creation import PRODUCT_DRAFT_FIELD_NAMES, ProductDraftInput
 from app.services import storefront_generation_service
+
+# "Use VELORA Sample Products" onboarding shortcut (ARCHITECTURE.md Checkpoint 11 / the onboarding
+# correction's optional shortcut inside the "add products" step) — five fully specified example
+# products so a new merchant can see the rest of Create My Store (generation, review, storefront)
+# without hand-typing products first. Not VELORA's own live catalog rows — those belong to the
+# seeded VELORA demo org (app/services/demo_service.py) — the same style of sample data, created
+# fresh under whichever org calls this.
+SAMPLE_PRODUCTS: list[dict] = [
+    {
+        "title": "Structured Tote", "price": 320.0, "sku": "DEMO-TOTE-01", "category": "Signature Totes",
+        "description": "A structured full-grain leather tote built for daily carry.", "tags": ["totes", "leather"],
+    },
+    {
+        "title": "City Crossbody", "price": 220.0, "sku": "DEMO-CROSS-01", "category": "Everyday Crossbody",
+        "description": "A compact pebbled-leather crossbody sized for everyday essentials.", "tags": ["crossbody", "leather"],
+    },
+    {
+        "title": "Bifold Wallet", "price": 95.0, "sku": "DEMO-WALLET-01", "category": "Wallets & Cardholders",
+        "description": "A slim bifold wallet in pebbled leather.", "tags": ["wallets", "leather"],
+    },
+    {
+        "title": "Leather Belt", "price": 90.0, "sku": "DEMO-BELT-01", "category": "Belts & Accessories",
+        "description": "A vegetable-tanned leather belt with a solid brass buckle.", "tags": ["belts", "leather"],
+    },
+    {
+        "title": "Satin Evening Clutch", "price": 190.0, "sku": "DEMO-CLUTCH-01", "category": "Evening Clutches",
+        "description": "A satin evening clutch with a slim, considered silhouette.", "tags": ["clutches", "evening"],
+    },
+]
 
 
 async def start_or_get_session(db: AsyncSession, org_id: uuid.UUID) -> StoreCreationSession:
@@ -72,10 +101,49 @@ async def create_product_draft(db: AsyncSession, org_id: uuid.UUID, payload) -> 
     return draft
 
 
+async def create_sample_product_drafts(db: AsyncSession, org_id: uuid.UUID) -> list[ProductDraft]:
+    """"Use VELORA Sample Products" — see SAMPLE_PRODUCTS above. Each one is fully specified (all
+    fields `known`), so they're immediately acceptable without a Product Agent generation pass,
+    though the owner can still run "Generate content" on them like any other draft."""
+
+    drafts = []
+    for sample in SAMPLE_PRODUCTS:
+        payload = ProductDraftInput(
+            title=sample["title"], price=sample["price"], sku=sample["sku"], category=sample["category"],
+            description=sample["description"], tags=sample["tags"], seo_title=None, seo_description=None,
+            source_image_refs=None,
+        )
+        drafts.append(await create_product_draft(db, org_id, payload))
+    return drafts
+
+
 async def _get_draft_or_404(db: AsyncSession, org_id: uuid.UUID, draft_id: uuid.UUID) -> ProductDraft:
     draft = await store_creation_repo.get_product_draft(db, org_id, draft_id)
     if draft is None:
         raise NotFoundError("Product draft not found")
+    return draft
+
+
+async def update_product_draft(db: AsyncSession, org_id: uuid.UUID, draft_id: uuid.UUID, payload) -> ProductDraft:
+    """Owner edit during review (Guide step 4) — the only way to move a `requires_confirmation`
+    field (price/sku, never AI-generated) or a `suggested` one to `known` without rejecting and
+    re-creating the whole draft. Blocked once the draft is finalized either way, same as accept/
+    reject below."""
+
+    draft = await _get_draft_or_404(db, org_id, draft_id)
+    if draft.status in (ProductDraftStatus.accepted, ProductDraftStatus.rejected):
+        raise ConflictError(f"Draft already {draft.status}")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if updates:
+        fields = dict(draft.fields)
+        field_status = dict(draft.field_status)
+        for name, value in updates.items():
+            fields[name] = value
+            field_status[name] = "known"
+        draft.fields = fields
+        draft.field_status = field_status
+        await db.commit()
     return draft
 
 

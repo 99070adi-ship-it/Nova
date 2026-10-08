@@ -1,0 +1,179 @@
+from app.ai.agents import DELEGATABLE_AGENT_KEYS
+
+
+async def _auth_headers(client, seeded_owner):
+    res = await client.post("/api/v1/auth/login", json={"email": seeded_owner["email"], "password": seeded_owner["password"]})
+    return {"Authorization": f"Bearer {res.json()['access_token']}"}
+
+
+def _status_by_key(progress: dict) -> dict:
+    return {s["key"]: s["status"] for s in progress["steps"]}
+
+
+async def test_progress_starts_all_locked_except_brand(client, seeded_owner):
+    headers = await _auth_headers(client, seeded_owner)
+    res = await client.get("/api/v1/onboarding/progress", headers=headers)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["current_step"] == "brand"
+    assert body["intro_video_seen"] is False
+    statuses = _status_by_key(body)
+    assert statuses["brand"] == "available"
+    assert statuses["products"] == "locked"
+    assert statuses["run_business"] == "locked"
+
+
+async def test_intro_video_seen_is_one_shot_and_persists(client, seeded_owner):
+    headers = await _auth_headers(client, seeded_owner)
+    res = await client.post("/api/v1/onboarding/intro-video-seen", headers=headers)
+    assert res.status_code == 200
+    assert res.json()["intro_video_seen"] is True
+
+    # A fresh GET (simulating a page refresh) must still show it as seen.
+    again = await client.get("/api/v1/onboarding/progress", headers=headers)
+    assert again.json()["intro_video_seen"] is True
+
+
+async def test_progress_advances_step_by_step_through_the_real_flow(client, seeded_owner):
+    headers = await _auth_headers(client, seeded_owner)
+
+    async def progress():
+        res = await client.get("/api/v1/onboarding/progress", headers=headers)
+        return _status_by_key(res.json()), res.json()["current_step"]
+
+    statuses, current = await progress()
+    assert current == "brand"
+    assert statuses["brand"] == "available"
+
+    # Step 1 — brand.
+    await client.post("/api/v1/store-creation/start", headers=headers)
+    await client.put("/api/v1/store-creation/brand-input", json={"name": "Aurora Goods"}, headers=headers)
+    statuses, current = await progress()
+    assert statuses["brand"] == "completed"
+    assert current == "products"
+
+    # Step 2 — products.
+    draft_res = await client.post(
+        "/api/v1/store-creation/product-drafts",
+        json={"title": "Aurora Tote", "price": 128, "sku": "AUR-TOTE-1"},
+        headers=headers,
+    )
+    draft_id = draft_res.json()["id"]
+    statuses, current = await progress()
+    assert statuses["products"] == "completed"
+    assert current == "catalog"
+
+    # Step 3 — NOVA generates content.
+    await client.post(f"/api/v1/store-creation/product-drafts/{draft_id}/generate", headers=headers)
+    statuses, current = await progress()
+    assert statuses["catalog"] == "completed"
+    assert current == "review"
+
+    # Step 4 — owner resolves the draft.
+    await client.post(f"/api/v1/store-creation/product-drafts/{draft_id}/accept", headers=headers)
+    statuses, current = await progress()
+    assert statuses["review"] == "completed"
+    assert current == "collections"
+
+    # Step 5 — collections.
+    await client.post(
+        "/api/v1/collections", json={"title": "New Arrivals", "slug": "new-arrivals"}, headers=headers
+    )
+    statuses, current = await progress()
+    assert statuses["collections"] == "completed"
+    assert current == "storefront"
+
+    # Step 6/7 — storefront draft generated (preview rides along with it — no state of its own).
+    await client.post("/api/v1/store-creation/generate-storefront", headers=headers)
+    statuses, current = await progress()
+    assert statuses["storefront"] == "completed"
+    assert statuses["preview"] == "completed"
+    assert current == "nl_edit"
+
+    # Step 8 — natural-language change plan.
+    await client.post("/api/v1/storefront/change-plan", json={"instruction": "add a story about us"}, headers=headers)
+    statuses, current = await progress()
+    assert statuses["nl_edit"] == "completed"
+    assert current == "publish"
+
+    # Step 9 — publish.
+    await client.post("/api/v1/storefront/publish", headers=headers)
+    statuses, current = await progress()
+    assert statuses["publish"] == "completed"
+    assert current == "run_business"
+
+    # Step 10 — run the business: both a Store Manager health run AND an action plan are required.
+    await client.post("/api/v1/store-manager/health", headers=headers)
+    statuses, current = await progress()
+    assert statuses["run_business"] == "available"
+    assert current == "run_business"
+
+    await client.post("/api/v1/store-manager/action-plan", headers=headers)
+    statuses, current = await progress()
+    assert statuses["run_business"] == "completed"
+    assert current is None
+
+
+async def test_nova_guide_is_a_real_agent_that_reads_real_progress(client, seeded_owner):
+    headers = await _auth_headers(client, seeded_owner)
+
+    start_res = await client.post(
+        "/api/v1/ai/conversations", json={"agent_key": "nova_guide", "context": {}}, headers=headers
+    )
+    assert start_res.status_code == 201
+    conversation_id = start_res.json()["id"]
+
+    msg_res = await client.post(
+        f"/api/v1/ai/conversations/{conversation_id}/messages",
+        json={"text": "What should I do next?"},
+        headers=headers,
+    )
+    assert msg_res.status_code == 200
+    body = msg_res.json()
+    # A real tool round trip happened — not a hardcoded tooltip engine — and it never mutates.
+    assert body["tool_call_log"][0]["name"] == "get_onboarding_progress"
+    assert body["tool_call_log"][0]["is_mutating"] is False
+    # Deterministic plain-English narration, not a raw dict repr of the tool result — a "Guide"
+    # that echoes {'current_step': 'brand', 'steps': [...]} defeats the point of narrating.
+    assert "current_step" not in body["assistant_text"]
+    assert "Tell NOVA about your business" in body["assistant_text"]
+
+
+async def test_nova_guide_lesson_narration_prompts_bypass_the_generic_tool_call(client, seeded_owner):
+    # The NOVA 2.0 Guide redesign's demo/explain/complete narration calls (FirstProductLesson.tsx)
+    # send a fixed prompt per phase and must get phase-appropriate text back — not nova_guide's
+    # usual auto-triggered get_onboarding_progress tool call overriding every fresh message.
+    headers = await _auth_headers(client, seeded_owner)
+    start_res = await client.post(
+        "/api/v1/ai/conversations", json={"agent_key": "nova_guide", "context": {}}, headers=headers
+    )
+    conversation_id = start_res.json()["id"]
+
+    demo_res = await client.post(
+        f"/api/v1/ai/conversations/{conversation_id}/messages",
+        json={"text": "I'm about to demonstrate adding a product. Narrate what you're about to show me and why, in one or two sentences."},
+        headers=headers,
+    )
+    assert demo_res.status_code == 200
+    assert demo_res.json()["tool_call_log"] == []
+    assert "Watch me first" in demo_res.json()["assistant_text"]
+
+    explain_res = await client.post(
+        f"/api/v1/ai/conversations/{conversation_id}/messages",
+        json={"text": "Explain briefly what you just showed me and why NOVA tracks known vs AI-suggested fields separately."},
+        headers=headers,
+    )
+    assert "actually know" in explain_res.json()["assistant_text"].lower()
+
+    complete_res = await client.post(
+        f"/api/v1/ai/conversations/{conversation_id}/messages",
+        json={"text": "The user just added their own product successfully. Congratulate them briefly and tell them what's next."},
+        headers=headers,
+    )
+    assert "Nicely done" in complete_res.json()["assistant_text"]
+
+
+async def test_nova_guide_is_not_delegatable_by_store_manager(client, seeded_owner):
+    # Store Manager may only delegate to specialists — never to the onboarding guide itself
+    # (ARCHITECTURE.md "Onboarding — the NOVA Guide": it narrates, it doesn't get orchestrated).
+    assert "nova_guide" not in DELEGATABLE_AGENT_KEYS

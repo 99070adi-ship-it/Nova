@@ -48,6 +48,16 @@ async def list_product_drafts(db: AsyncSession, org_id: uuid.UUID, session_id: u
     return list(result.scalars().all())
 
 
+async def list_product_drafts_by_org(db: AsyncSession, org_id: uuid.UUID) -> list[ProductDraft]:
+    """Across every session, not just the current one — onboarding progress (ARCHITECTURE.md
+    "Onboarding — the NOVA Guide") must still see a draft's outcome after its session completes."""
+
+    result = await db.execute(
+        select(ProductDraft).where(ProductDraft.org_id == org_id).order_by(ProductDraft.created_at.asc())
+    )
+    return list(result.scalars().all())
+
+
 async def get_product_draft(db: AsyncSession, org_id: uuid.UUID, draft_id: uuid.UUID) -> ProductDraft | None:
     result = await db.execute(select(ProductDraft).where(ProductDraft.id == draft_id, ProductDraft.org_id == org_id))
     return result.scalar_one_or_none()

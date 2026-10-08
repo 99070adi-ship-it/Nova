@@ -5,3 +5,57 @@
 body {
   @apply bg-neutral-50 text-neutral-900 antialiased;
 }
+
+/* NovaFace (components/NovaFace.tsx) + NovaSpotlight (components/NovaSpotlight.tsx) — small,
+   deliberate motion so NOVA reads as a character reacting to what it's doing, not a static icon:
+   an idle blink always running, a talking mouth only while narration text is actually showing,
+   and a tap pulse on whatever the spotlight just landed on. */
+@keyframes nova-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  96% { transform: scaleY(0.1); }
+}
+@keyframes nova-talk {
+  0%, 100% { transform: scaleX(1); }
+  50% { transform: scaleX(0.55); }
+}
+@keyframes nova-tap-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.55); }
+  100% { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0); }
+}
+.nova-face-eye {
+  animation: nova-blink 4.5s ease-in-out infinite;
+  transform-origin: center;
+}
+.nova-face-mouth-talking {
+  animation: nova-talk 0.45s ease-in-out infinite;
+  transform-origin: center;
+}
+.nova-pointer-pulse {
+  animation: nova-tap-pulse 1.1s ease-out infinite;
+}
+
+/* The Guide panel "pops up" once, on mount — the moment you land on the first onboarding screen
+   after signing in — rather than just appearing static. Plays once (no infinite loop) with a
+   slight overshoot so it reads as something arriving, not fading in by accident. */
+@keyframes nova-pop-in {
+  0% { opacity: 0; transform: scale(0.85) translateY(10px); }
+  60% { opacity: 1; transform: scale(1.03) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.nova-pop-in {
+  animation: nova-pop-in 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* NovaGuideWidget — NOVA lives docked as a small chat bubble bottom-right until a tutorial step
+   starts, at which point it physically bounces up off the dock and becomes the full guide box
+   (more overshoot than nova-pop-in above — this one's meant to read as "arriving", not a subtle
+   settle), then floats to track whatever it's currently spotlighting for the rest of that step. */
+@keyframes nova-bounce-in {
+  0% { opacity: 0; transform: scale(0.3) translateY(60px); }
+  45% { opacity: 1; transform: scale(1.08) translateY(-14px); }
+  70% { transform: scale(0.96) translateY(4px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.nova-bounce-in {
+  animation: nova-bounce-in 650ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}

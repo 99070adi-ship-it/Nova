@@ -64,6 +64,20 @@ export async function login(email: string, password: string) {
   });
 }
 
+export async function signup(input: { org_name: string; full_name: string; email: string; password: string }) {
+  return apiFetch<{ access_token: string; expires_in: number }>("/auth/signup", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// One-click, no form — resets the shared demo identity to a blank org server-side and logs
+// straight into it. The mandatory onboarding gate (App.tsx) then runs exactly as it would for a
+// brand new signup, every time (see backend/app/services/demo_service.py::reset_to_blank_demo).
+export async function demoLogin() {
+  return apiFetch<{ access_token: string; expires_in: number }>("/auth/demo-login", { method: "POST" });
+}
+
 export async function logout() {
   return apiFetch<void>("/auth/logout", { method: "POST" });
 }
@@ -307,6 +321,28 @@ export async function createProductDraft(input: {
   return apiFetch<ProductDraft>("/store-creation/product-drafts", { method: "POST", body: JSON.stringify(input) });
 }
 
+export async function updateProductDraft(
+  draftId: string,
+  input: {
+    title?: string | null;
+    description?: string | null;
+    price?: number | null;
+    sku?: string | null;
+    category?: string | null;
+    tags?: string[] | null;
+    seo_title?: string | null;
+    seo_description?: string | null;
+  }
+) {
+  return apiFetch<ProductDraft>(`/store-creation/product-drafts/${draftId}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+// Onboarding shortcut ("add products" step) — five fully specified example products so a new
+// merchant can see the rest of Create My Store without hand-typing products first.
+export async function useVeloraSampleProducts() {
+  return apiFetch<ProductDraft[]>("/store-creation/product-drafts/use-sample-products", { method: "POST" });
+}
+
 export async function generateProductDraftContent(draftId: string) {
   return apiFetch<ProductDraft>(`/store-creation/product-drafts/${draftId}/generate`, { method: "POST" });
 }
@@ -536,10 +572,18 @@ export interface StoreHealthFinding {
   suggested_action: string | null;
 }
 
+export interface AgentToolCall {
+  name: string;
+  arguments: Record<string, unknown>;
+  is_mutating: boolean;
+}
+
 export interface StoreHealthReport {
   run_id: string;
   findings: StoreHealthFinding[];
   narrative: Record<string, string>;
+  trace: Record<string, AgentToolCall[]>;
+  generated_at: string | null;
 }
 
 export interface ActionPlanItem {
@@ -555,14 +599,62 @@ export interface ActionPlan {
   id: string;
   run_id: string;
   items: ActionPlanItem[];
+  generated_at: string | null;
 }
 
 export async function getStoreHealth() {
   return apiFetch<StoreHealthReport>("/store-manager/health", { method: "POST" });
 }
 
+// Read-only — the Overview "needs attention" feed reads whatever Store Health last found instead
+// of triggering a fresh multi-agent run on every page load. null until "How is my store doing?"
+// has been run at least once.
+export async function getLatestStoreHealth() {
+  return apiFetch<StoreHealthReport | null>("/store-manager/health/latest");
+}
+
+// Read-only review of the last "Fix what you can" run — item statuses are refreshed against
+// their live ToolProposal, so an item approved later through Approvals doesn't show stale here.
+export async function getLatestActionPlan() {
+  return apiFetch<ActionPlan | null>("/store-manager/action-plan/latest");
+}
+
 export async function createActionPlan() {
   return apiFetch<ActionPlan>("/store-manager/action-plan", { method: "POST" });
+}
+
+// ---- Onboarding progress ----
+
+export type OnboardingStepKey =
+  | "brand"
+  | "products"
+  | "catalog"
+  | "review"
+  | "collections"
+  | "storefront"
+  | "preview"
+  | "nl_edit"
+  | "publish"
+  | "run_business";
+
+export interface OnboardingStep {
+  key: OnboardingStepKey;
+  title: string;
+  status: "locked" | "available" | "completed";
+}
+
+export interface OnboardingProgress {
+  steps: OnboardingStep[];
+  current_step: OnboardingStepKey | null;
+  intro_video_seen: boolean;
+}
+
+export async function getOnboardingProgress() {
+  return apiFetch<OnboardingProgress>("/onboarding/progress");
+}
+
+export async function markIntroVideoSeen() {
+  return apiFetch<OnboardingProgress>("/onboarding/intro-video-seen", { method: "POST" });
 }
 
 export { API_BASE_URL };

@@ -26,6 +26,9 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # One-shot gate for the first-login intro video (ARCHITECTURE.md "Onboarding — the NOVA
+    # Guide") — set the first time it's shown so returning users are never forced through it again.
+    onboarding_intro_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class RefreshToken(Base, UUIDPKMixin, TimestampMixin):

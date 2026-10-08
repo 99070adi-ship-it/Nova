@@ -37,6 +37,15 @@ async def get_draft(db: AsyncSession, org_id: uuid.UUID) -> StorefrontVersion | 
     return result.unique().scalar_one_or_none()
 
 
+async def get_by_id(db: AsyncSession, version_id: uuid.UUID) -> StorefrontVersion | None:
+    """Keyed only by the version's own (unguessable) UUID, no org_id filter — backs the public
+    draft-preview link (ARCHITECTURE.md "Real store preview"), which an org's own admin opens
+    without a customer-facing auth mechanism to carry. Draft or live, any status."""
+
+    result = await db.execute(_full_version_query().where(StorefrontVersion.id == version_id))
+    return result.unique().scalar_one_or_none()
+
+
 async def get_live(db: AsyncSession, org_id: uuid.UUID) -> StorefrontVersion | None:
     result = await db.execute(
         _full_version_query()

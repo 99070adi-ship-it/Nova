@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 from app.ai.provider import LLMProvider, ProviderFinal, ToolCallRequest, ToolResultMessage
+from app.ai.reliability import safe_provider_step
 from app.ai.tools import TOOL_REGISTRY, tool_schemas_for_model
 
 ToolExecutor = Callable[[ToolCallRequest], Awaitable[ToolResultMessage]]
@@ -41,8 +42,8 @@ async def run_agent(
     available_tools = tool_schemas_for_model(tool_names)
 
     for _round in range(max_round_trips):
-        step = await provider.step(
-            system_prompt=system_prompt, context=context, messages=messages,
+        step = await safe_provider_step(
+            provider, system_prompt=system_prompt, context=context, messages=messages,
             tool_results=tool_results, available_tools=available_tools,
         )
         total_prompt_tokens += step.prompt_tokens

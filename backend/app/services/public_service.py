@@ -21,6 +21,20 @@ async def get_live_storefront(db: AsyncSession, org_id: uuid.UUID) -> Storefront
     return live
 
 
+async def get_storefront_by_version_id(db: AsyncSession, version_id: uuid.UUID) -> tuple[Organization, StorefrontVersion]:
+    """Backs the unauthenticated draft-preview link opened from Store Builder (ARCHITECTURE.md
+    "Real store preview") — the version id itself, not a session, is the access key, same
+    trade-off an unlisted staging link makes; acceptable for Prototype 1, not for production."""
+
+    version = await storefront_repo.get_by_id(db, version_id)
+    if version is None:
+        raise NotFoundError("Storefront version not found")
+    org = await db.get(Organization, version.org_id)
+    if org is None:
+        raise NotFoundError("Store not found")
+    return org, version
+
+
 async def list_published_products(db: AsyncSession, org_id: uuid.UUID) -> list[Product]:
     return await product_repo.list_published_products(db, org_id)
 

@@ -40,6 +40,27 @@ async def test_public_storefront_requires_valid_org_slug(client, seeded_owner):
     assert missing_res.status_code == 404
 
 
+async def test_draft_preview_is_publicly_readable_by_version_id_without_publishing(client, seeded_owner):
+    headers = await _auth_headers(client, seeded_owner)
+    draft_res = await client.get("/api/v1/storefront/draft", headers=headers)
+    draft_id = draft_res.json()["id"]
+
+    # No publish happened — the live public endpoint has nothing to show.
+    live_res = await client.get(f"/api/v1/public/stores/{seeded_owner['org_slug']}/storefront")
+    assert live_res.status_code == 404
+
+    preview_res = await client.get(f"/api/v1/public/preview/{draft_id}")
+    assert preview_res.status_code == 200
+    assert preview_res.json()["pages"][0]["slug"] == "home"
+    section_types = [s["type"] for s in preview_res.json()["pages"][0]["sections"]]
+    assert "hero" in section_types
+
+
+async def test_preview_404s_for_unknown_version_id(client, seeded_owner):
+    res = await client.get("/api/v1/public/preview/00000000-0000-0000-0000-000000000000")
+    assert res.status_code == 404
+
+
 async def test_public_products_only_shows_published(client, seeded_owner):
     headers = await _auth_headers(client, seeded_owner)
     org_slug = seeded_owner["org_slug"]

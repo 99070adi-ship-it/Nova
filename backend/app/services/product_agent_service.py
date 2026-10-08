@@ -10,6 +10,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.factory import build_llm_provider
+from app.ai.reliability import guard_agent_run, safe_provider_step
 from app.db.models import AgentRunStatus, ProductDraft, ProductDraftStatus
 from app.errors import ConflictError, NotFoundError
 from app.repositories import ai_repo, store_creation_repo
@@ -43,36 +44,40 @@ async def generate_draft_content(db: AsyncSession, org_id: uuid.UUID, draft_id: 
 
     run = await ai_repo.create_agent_run(db, org_id, agent_key="product_agent", trigger="generate_draft_content")
     provider = build_llm_provider()
-    step = await provider.step(
-        system_prompt=PRODUCT_CONTENT_SYSTEM_PROMPT, context=context, messages=[], tool_results=[], available_tools=[]
-    )
+    async with guard_agent_run(db, run):
+        step = await safe_provider_step(
+            provider, system_prompt=PRODUCT_CONTENT_SYSTEM_PROMPT, context=context, messages=[],
+            tool_results=[], available_tools=[],
+        )
 
-    suggested: dict = {}
-    if step.final is not None:
-        try:
-            parsed = json.loads(step.final.text)
-            if isinstance(parsed, dict):
-                suggested = parsed
-        except json.JSONDecodeError:
-            suggested = {}  # a real model returning malformed JSON — fail soft, not crash
+        suggested: dict = {}
+        if step.final is not None:
+            try:
+                parsed = json.loads(step.final.text)
+                if isinstance(parsed, dict):
+                    suggested = parsed
+            except json.JSONDecodeError:
+                suggested = {}  # a real model returning malformed JSON — fail soft, not crash
 
-    fields = dict(draft.fields)
-    field_status = dict(draft.field_status)
-    for key in PRODUCT_AGENT_GENERATABLE_FIELDS:
-        if field_status.get(key) == "known":
-            continue  # never overwrite what the owner actually typed
-        value = suggested.get(key)
-        if value:
-            fields[key] = value
-            field_status[key] = "suggested"
+        # Nothing below runs if the provider call above raised — the draft is left exactly as it
+        # was (still `owner_reviewing`/`pending_generation`), never half-updated.
+        fields = dict(draft.fields)
+        field_status = dict(draft.field_status)
+        for key in PRODUCT_AGENT_GENERATABLE_FIELDS:
+            if field_status.get(key) == "known":
+                continue  # never overwrite what the owner actually typed
+            value = suggested.get(key)
+            if value:
+                fields[key] = value
+                field_status[key] = "suggested"
 
-    draft.fields = fields
-    draft.field_status = field_status
-    draft.status = ProductDraftStatus.generated
+        draft.fields = fields
+        draft.field_status = field_status
+        draft.status = ProductDraftStatus.generated
 
-    await ai_repo.complete_agent_run(
-        db, run, status=AgentRunStatus.completed, prompt_tokens=step.prompt_tokens,
-        completion_tokens=step.completion_tokens, hit_loop_cap=False, result_json={"suggested": suggested},
-    )
+        await ai_repo.complete_agent_run(
+            db, run, status=AgentRunStatus.completed, prompt_tokens=step.prompt_tokens,
+            completion_tokens=step.completion_tokens, hit_loop_cap=False, result_json={"suggested": suggested},
+        )
     await db.commit()
     return draft

@@ -11,6 +11,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.factory import build_llm_provider
+from app.ai.reliability import guard_agent_run, safe_provider_step
 from app.db.models import AgentRunStatus, AIAgentRun
 from app.errors import ConflictError, NotFoundError
 from app.repositories import ai_repo, store_creation_repo, storefront_repo
@@ -41,24 +42,26 @@ async def propose_change_plan(db: AsyncSession, org_id: uuid.UUID, *, instructio
 
     run = await ai_repo.create_agent_run(db, org_id, agent_key="storefront_agent", trigger="propose_change_plan")
     provider = build_llm_provider()
-    step = await provider.step(
-        system_prompt=STOREFRONT_AGENT_SYSTEM_PROMPT, context=context, messages=[], tool_results=[], available_tools=[]
-    )
+    async with guard_agent_run(db, run):
+        step = await safe_provider_step(
+            provider, system_prompt=STOREFRONT_AGENT_SYSTEM_PROMPT, context=context, messages=[],
+            tool_results=[], available_tools=[],
+        )
 
-    plan: list[dict] = []
-    if step.final is not None:
-        try:
-            parsed = json.loads(step.final.text)
-            if isinstance(parsed, list):
-                plan = parsed
-        except json.JSONDecodeError:
-            plan = []
+        plan: list[dict] = []
+        if step.final is not None:
+            try:
+                parsed = json.loads(step.final.text)
+                if isinstance(parsed, list):
+                    plan = parsed
+            except json.JSONDecodeError:
+                plan = []
 
-    await ai_repo.complete_agent_run(
-        db, run, status=AgentRunStatus.completed, prompt_tokens=step.prompt_tokens,
-        completion_tokens=step.completion_tokens, hit_loop_cap=False,
-        result_json={"instruction": instruction, "plan": plan, "applied": False},
-    )
+        await ai_repo.complete_agent_run(
+            db, run, status=AgentRunStatus.completed, prompt_tokens=step.prompt_tokens,
+            completion_tokens=step.completion_tokens, hit_loop_cap=False,
+            result_json={"instruction": instruction, "plan": plan, "applied": False},
+        )
     await db.commit()
     return run
 

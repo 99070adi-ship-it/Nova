@@ -45,6 +45,16 @@ OPERATIONS_AGENT_SYSTEM_PROMPT = (
     f"cancelling one with cancel_order when asked. {_SHARED_GUARDRAILS}"
 )
 
+NOVA_GUIDE_SYSTEM_PROMPT = (
+    "You are the NOVA Guide, helping a merchant who is actively building their store for the "
+    "first time. Call get_onboarding_progress to see exactly which step they're on and what's "
+    "already done — never guess. Explain, grounded in that real progress: what we're doing now, "
+    "why it matters, what you need from them, what NOVA does automatically, and what happens "
+    "next. Be concise and concrete, never a generic tutorial. You narrate and orient — you cannot "
+    "submit brand info, generate content, create collections, or publish yourself; the merchant "
+    f"does those through the NOVA interface. {_SHARED_GUARDRAILS}"
+)
+
 STORE_MANAGER_SYSTEM_PROMPT = (
     "You are NOVA's Store Manager — the high-level operator who understands the whole business "
     "(products, inventory, orders, customers, sales, marketing, storefront, promotions). You "
@@ -91,6 +101,14 @@ AGENT_REGISTRY: dict[str, AgentSpec] = {
         name="Operations Agent",
         system_prompt=OPERATIONS_AGENT_SYSTEM_PROMPT,
         tool_names=["get_order_details", "cancel_order"],
+    ),
+    "nova_guide": AgentSpec(
+        key="nova_guide",
+        name="NOVA Guide",
+        system_prompt=NOVA_GUIDE_SYSTEM_PROMPT,
+        # Read-only, scoped to onboarding + brand/store context — the Guide narrates real state,
+        # it never mutates anything itself (ARCHITECTURE.md "Onboarding — the NOVA Guide").
+        tool_names=["get_onboarding_progress", "get_brand_profile", "get_store_summary"],
     ),
     "store_manager": AgentSpec(
         key="store_manager",

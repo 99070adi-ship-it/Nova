@@ -72,6 +72,8 @@ class StoreHealthReportOut(BaseModel):
     run_id: uuid.UUID
     findings: list[StoreHealthFindingOut]
     narrative: dict[str, str]
+    trace: dict[str, list[dict]] = {}
+    generated_at: datetime | None = None
 
 
 class ActionPlanItemOut(BaseModel):
@@ -87,6 +89,7 @@ class ActionPlanOut(BaseModel):
     id: uuid.UUID
     run_id: uuid.UUID
     items: list[ActionPlanItemOut]
+    generated_at: datetime | None = None
 
 
 class AuditLogOut(BaseModel):

@@ -47,6 +47,24 @@ class ProductDraftInput(BaseModel):
     source_image_refs: list[str] | None = None
 
 
+class ProductDraftUpdate(BaseModel):
+    """Owner edits during the review step (Guide step 4: "owner accepts/edits/rejects
+    suggestions") — filling in a `requires_confirmation` field (price/sku are never AI-generated,
+    ARCHITECTURE.md "Product ingestion") or overriding a `suggested` one. Every field the owner
+    sets here becomes `known`, same as if they'd typed it at creation. Unset fields are left
+    alone — `exclude_unset` at the call site distinguishes "not editing this field" from "clearing
+    it to null"."""
+
+    title: str | None = None
+    description: str | None = None
+    price: float | None = None
+    sku: str | None = None
+    category: str | None = None
+    tags: list[str] | None = None
+    seo_title: str | None = None
+    seo_description: str | None = None
+
+
 class ProductDraftOut(BaseModel):
     id: uuid.UUID
     status: ProductDraftStatus

@@ -1,11 +1,23 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { ApiError, API_BASE_URL, CurrentUser, getMe, login as apiLogin, logout as apiLogout, setAccessToken } from "../api/client";
+import {
+  ApiError,
+  API_BASE_URL,
+  CurrentUser,
+  demoLogin as apiDemoLogin,
+  getMe,
+  login as apiLogin,
+  logout as apiLogout,
+  signup as apiSignup,
+  setAccessToken,
+} from "../api/client";
 
 interface AuthState {
   isAuthenticated: boolean;
   user: CurrentUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  signup: (input: { org_name: string; full_name: string; email: string; password: string }) => Promise<void>;
+  enterDemo: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -40,6 +52,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(await getMe());
   };
 
+  const signup = async (input: { org_name: string; full_name: string; email: string; password: string }) => {
+    const { access_token } = await apiSignup(input);
+    setAccessToken(access_token);
+    setUser(await getMe());
+  };
+
+  const enterDemo = async () => {
+    const { access_token } = await apiDemoLogin();
+    setAccessToken(access_token);
+    setUser(await getMe());
+  };
+
   const logout = async () => {
     try {
       await apiLogout();
@@ -51,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated: user !== null, user, loading, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated: user !== null, user, loading, login, signup, enterDemo, logout }}>
       {children}
     </AuthContext.Provider>
   );

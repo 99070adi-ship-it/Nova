@@ -27,6 +27,22 @@ async def get_storefront(org_slug: str, db: AsyncSession = Depends(get_db)) -> P
     )
 
 
+@router.get("/preview/{version_id}", response_model=PublicStorefront)
+async def get_storefront_preview(version_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> PublicStorefront:
+    org, version = await public_service.get_storefront_by_version_id(db, version_id)
+    return PublicStorefront(
+        store_name=org.name,
+        theme=version.theme.tokens,
+        pages=[
+            PublicPage(
+                slug=p.slug, title=p.title, order=p.order,
+                sections=[PublicSection.model_validate(s) for s in sorted(p.sections, key=lambda s: s.order)],
+            )
+            for p in sorted(version.pages, key=lambda p: p.order)
+        ],
+    )
+
+
 @router.get("/stores/{org_slug}/products", response_model=list[PublicProduct])
 async def list_products(org_slug: str, db: AsyncSession = Depends(get_db)) -> list[PublicProduct]:
     org = await public_service.get_org_by_slug_or_404(db, org_slug)

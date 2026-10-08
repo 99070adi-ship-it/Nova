@@ -40,6 +40,9 @@ class FakeLLMProvider(LLMProvider):
             return ProviderStepResult(final=ProviderFinal(text=""))
 
         if tool_results:
+            guide_narration = _synthesize_guide_narration(tool_results)
+            if guide_narration is not None:
+                return ProviderStepResult(final=ProviderFinal(text=guide_narration))
             summary = "; ".join(f"{r.name} -> {r.content}" for r in tool_results)
             return ProviderStepResult(final=ProviderFinal(text=f"Based on {summary}."))
 
@@ -53,6 +56,21 @@ class FakeLLMProvider(LLMProvider):
         # Plan. Synthesize deterministic, keyword-driven edits rather than a no-op.
         if not available_tools and "instruction" in context:
             return ProviderStepResult(final=ProviderFinal(text=json.dumps(_synthesize_change_plan(context))))
+
+        # No tools + context.kind == "storefront_generation" ⇒ storefront_generation_service's
+        # single structured call. Synthesize deterministic copy from the real brand/collections in
+        # context, in the exact shape StorefrontGenerationPlan validates.
+        if not available_tools and context.get("kind") == "storefront_generation":
+            return ProviderStepResult(final=ProviderFinal(text=json.dumps(_synthesize_storefront_plan(context))))
+
+        # A lesson-specific narration prompt (FirstProductLesson.tsx's demo/explain/complete
+        # calls) — matched by message content, not context shape, since nova_guide's tool set
+        # means any other fresh message would otherwise always fall through to the generic
+        # get_onboarding_progress tool-call path below. Checked first so it takes precedence.
+        last_message = messages[-1] if messages else ""
+        lesson_narration = _synthesize_lesson_narration(last_message)
+        if lesson_narration is not None:
+            return ProviderStepResult(final=ProviderFinal(text=lesson_narration))
 
         # No tool results yet — call the first read-only tool this agent has access to, if any,
         # so an unscripted run still exercises a real tool round trip (call -> execution -> result
@@ -91,6 +109,55 @@ def _deterministic_pseudo_embedding(text: str, dimensions: int = 1536) -> list[f
         sign = 1.0 if digest[4] % 2 == 0 else -1.0
         vector[index] += sign
     return vector
+
+
+def _synthesize_lesson_narration(message: str) -> str | None:
+    """Deterministic stand-in for the active, demonstration-driven Guide lessons (NOVA 2.0's
+    Guide redesign — FirstProductLesson.tsx): the lesson sends a fixed, distinctive prompt per
+    phase, matched here by substring. A real provider would answer these same prompts from its
+    own reasoning; this produces a plain-English equivalent deterministically, same spirit as
+    _synthesize_guide_narration above."""
+
+    text = message.lower()
+    if "demonstrate adding a product" in text:
+        return (
+            "Watch me first — I'll fill in a product's name, price, SKU, and category, then "
+            "clear it so you can add the real one yourself."
+        )
+    if "what you just showed me" in text:
+        return (
+            "Those fields — title, price, SKU, category — are the facts only you actually know; "
+            "NOVA never guesses them. Everything else (description, SEO, tags) it can suggest "
+            "once a real product exists. Your turn — add one for real."
+        )
+    if "added their own product successfully" in text:
+        return "Nicely done — that's a real product now. NOVA can generate the rest whenever you're ready."
+    return None
+
+
+def _synthesize_guide_narration(tool_results: list[ToolResultMessage]) -> str | None:
+    """Deterministic stand-in for the NOVA Guide's narration (ARCHITECTURE.md "Onboarding — the
+    NOVA Guide") — without this, the generic tool-echo below would hand back a raw Python dict
+    repr of the progress payload, which defeats the entire point of a "Guide" under the default
+    (no API key) demo configuration. A real provider narrates this same tool result in its own
+    words; this produces a plain-English equivalent deterministically."""
+
+    progress_result = next((r for r in tool_results if r.name == "get_onboarding_progress"), None)
+    if progress_result is None:
+        return None
+
+    content = progress_result.content
+    steps = content.get("steps") or []
+    current_key = content.get("current_step")
+    completed_titles = [s["title"] for s in steps if s.get("status") == "completed"]
+
+    if current_key is None:
+        return "Every onboarding step is done — your store is built, published, and NOVA is watching it. Ask me anything, any time."
+
+    current_title = next((s["title"] for s in steps if s.get("key") == current_key), current_key)
+    if completed_titles:
+        return f"Nice work so far — {', '.join(completed_titles)} done. Next: {current_title}. Handle this step and I'll pick up from there."
+    return f"Let's start with: {current_title}. I'll take it from here once you do."
 
 
 def _synthesize_product_content(context: dict) -> dict:
@@ -162,6 +229,42 @@ def _synthesize_change_plan(context: dict) -> list[dict]:
     if not plan:
         plan.append({"action": "none", "description": "No actionable change matched this instruction.", "configuration": None})
 
+    return plan
+
+
+def _synthesize_storefront_plan(context: dict) -> dict:
+    """Deterministic stand-in for storefront_generation_service's structured call — builds the
+    same hero/brand-story/product-grid/theme plan the old hardcoded template produced, but from
+    genuinely reading `context` (brand, collections) rather than being a template itself: a real
+    OpenAI-backed provider synthesizes this same shape from its own reasoning over the same
+    context, not from calling this function."""
+
+    brand = context.get("brand", {})
+    name = brand.get("name") or "My Store"
+    story_body = brand.get("description") or brand.get("positioning")
+
+    collections = context.get("collections") or []
+
+    plan = {
+        "hero": {
+            "headline": name,
+            "subheadline": brand.get("vibe_text") or brand.get("positioning") or "Shop the collection",
+            "cta_text": "Shop now",
+            "cta_href": "/shop",
+        },
+        "include_brand_story": bool(story_body),
+        "brand_story": {"heading": "Our story", "body": story_body} if story_body else None,
+        "product_grid": {
+            "title": "Shop all",
+            "collection_id": collections[0]["id"] if collections else None,
+            "limit": 12,
+        },
+        "theme": {
+            "primary_color": (brand.get("preferred_colors") or [None])[0],
+            "border_radius": None,
+            "font_family": brand.get("typography_preference"),
+        },
+    }
     return plan
 
 

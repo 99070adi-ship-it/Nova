@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -8,13 +9,14 @@ from app.config import get_settings
 from app.core.security import (
     create_access_token,
     generate_refresh_token,
+    hash_password,
     hash_refresh_token,
     verify_password,
 )
 from app.db.base import utcnow
-from app.db.models import User
-from app.errors import ForbiddenError, NotFoundError
-from app.repositories import user_repo
+from app.db.models import Organization, Store, User, UserRole
+from app.errors import ConflictError, ForbiddenError, NotFoundError
+from app.repositories import storefront_repo, user_repo
 
 settings = get_settings()
 
@@ -27,12 +29,97 @@ class LoginResult:
     user: User
 
 
+def _slugify_org_name(name: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return slug or "store"
+
+
+async def _unique_org_slug(db: AsyncSession, base_slug: str) -> str:
+    slug = base_slug
+    suffix = 1
+    while await storefront_repo.get_org_by_slug(db, slug) is not None:
+        suffix += 1
+        slug = f"{base_slug}-{suffix}"
+    return slug
+
+
+async def signup(db: AsyncSession, *, org_name: str, email: str, password: str, full_name: str) -> LoginResult:
+    """Creates the Organization/Store/User an owner needs to land somewhere real immediately after
+    signup (ARCHITECTURE.md "Post-signup routing" — never an empty dashboard). Mirrors the
+    Organization/User/Store shape `scripts/seed.py` builds for VELORA; this is the only other place
+    those rows are constructed, so it stays a direct model construction rather than a repo layer
+    built for a single caller."""
+
+    if await user_repo.get_user_by_email(db, email) is not None:
+        raise ConflictError("An account with this email already exists", details={"code": "email_taken"})
+
+    slug = await _unique_org_slug(db, _slugify_org_name(org_name))
+    org = Organization(name=org_name, slug=slug)
+    db.add(org)
+    await db.flush()
+
+    db.add(Store(org_id=org.id, name=org_name, currency="USD"))
+    user = User(
+        org_id=org.id, email=email, password_hash=hash_password(password), full_name=full_name, role=UserRole.owner,
+    )
+    db.add(user)
+    await db.flush()
+
+    access_token = create_access_token(user_id=user.id, org_id=org.id, role=user.role.value)
+    raw_refresh = generate_refresh_token()
+    await user_repo.create_refresh_token(
+        db,
+        user_id=user.id,
+        token_hash=hash_refresh_token(raw_refresh),
+        expires_at=utcnow() + timedelta(days=settings.refresh_token_ttl_days),
+    )
+    await db.commit()
+    return LoginResult(
+        access_token=access_token,
+        refresh_token=raw_refresh,
+        expires_in=settings.access_token_ttl_minutes * 60,
+        user=user,
+    )
+
+
 async def login(db: AsyncSession, *, email: str, password: str) -> LoginResult:
     user = await user_repo.get_user_by_email(db, email)
     if user is None or not user.is_active or user.deleted_at is not None:
         raise ForbiddenError("Invalid email or password", details={"code": "invalid_credentials"})
     if not verify_password(password, user.password_hash):
         raise ForbiddenError("Invalid email or password", details={"code": "invalid_credentials"})
+
+    access_token = create_access_token(user_id=user.id, org_id=user.org_id, role=user.role.value)
+    raw_refresh = generate_refresh_token()
+    await user_repo.create_refresh_token(
+        db,
+        user_id=user.id,
+        token_hash=hash_refresh_token(raw_refresh),
+        expires_at=utcnow() + timedelta(days=settings.refresh_token_ttl_days),
+    )
+    await db.commit()
+    return LoginResult(
+        access_token=access_token,
+        refresh_token=raw_refresh,
+        expires_in=settings.access_token_ttl_minutes * 60,
+        user=user,
+    )
+
+
+async def enter_demo(db: AsyncSession) -> LoginResult:
+    """The one-click, no-signup/no-signin public demo entry — resets the shared demo identity to
+    VELORA's rich business history (demo_service.reset_to_demo_baseline: real products,
+    collections, customers and orders already there) and issues real tokens for it, same shape as
+    login(). Onboarding itself starts genuinely incomplete, same as a fresh signup, so every
+    visitor gets NOVA's real Guide tutorial — demonstrating each step with VELORA's own data and
+    waiting for the visitor to press the real button — rather than landing in an already-finished
+    store with nothing left to do."""
+
+    from app.services import demo_service
+
+    summary = await demo_service.reset_to_demo_baseline()
+    user = await user_repo.get_user_by_email(db, summary["login_email"])
+    assert user is not None  # reset_to_demo_baseline() just created this exact user
 
     access_token = create_access_token(user_id=user.id, org_id=user.org_id, role=user.role.value)
     raw_refresh = generate_refresh_token()

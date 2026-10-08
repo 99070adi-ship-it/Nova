@@ -3,7 +3,19 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AIAgentRun, AIConversation, AIMessage, AuditLog, Customer, Inventory, Order, Product, ProductVariant
+from app.db.models import (
+    AgentActionPlan,
+    AgentRunStatus,
+    AIAgentRun,
+    AIConversation,
+    AIMessage,
+    AuditLog,
+    Customer,
+    Inventory,
+    Order,
+    Product,
+    ProductVariant,
+)
 
 
 async def create_conversation(db: AsyncSession, org_id: uuid.UUID, *, agent_key: str, context: dict, created_by_user_id: uuid.UUID) -> AIConversation:
@@ -52,6 +64,19 @@ async def get_agent_run(db: AsyncSession, org_id: uuid.UUID, run_id: uuid.UUID) 
     return result.scalar_one_or_none()
 
 
+async def get_latest_completed_agent_run(db: AsyncSession, org_id: uuid.UUID, *, agent_key: str, trigger: str) -> AIAgentRun | None:
+    result = await db.execute(
+        select(AIAgentRun)
+        .where(
+            AIAgentRun.org_id == org_id, AIAgentRun.agent_key == agent_key,
+            AIAgentRun.trigger == trigger, AIAgentRun.status == AgentRunStatus.completed,
+        )
+        .order_by(AIAgentRun.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 async def get_store_summary(db: AsyncSession, org_id: uuid.UUID) -> dict:
     products_count = (await db.execute(select(func.count()).select_from(Product).where(Product.org_id == org_id))).scalar_one()
     customers_count = (await db.execute(select(func.count()).select_from(Customer).where(Customer.org_id == org_id))).scalar_one()
@@ -71,3 +96,29 @@ async def get_store_summary(db: AsyncSession, org_id: uuid.UUID) -> dict:
 async def list_recent_audit_logs(db: AsyncSession, org_id: uuid.UUID, *, limit: int = 100) -> list[AuditLog]:
     result = await db.execute(select(AuditLog).where(AuditLog.org_id == org_id).order_by(AuditLog.created_at.desc()).limit(limit))
     return list(result.scalars().all())
+
+
+async def has_completed_agent_run(db: AsyncSession, org_id: uuid.UUID, *, agent_key: str, trigger: str | None = None) -> bool:
+    """Onboarding progress derivation (ARCHITECTURE.md "Onboarding — the NOVA Guide") — a step is
+    "done" when the real run happened, not a separately persisted flag."""
+
+    stmt = select(func.count()).select_from(AIAgentRun).where(
+        AIAgentRun.org_id == org_id, AIAgentRun.agent_key == agent_key, AIAgentRun.status == AgentRunStatus.completed
+    )
+    if trigger is not None:
+        stmt = stmt.where(AIAgentRun.trigger == trigger)
+    return (await db.execute(stmt)).scalar_one() > 0
+
+
+async def has_action_plan(db: AsyncSession, org_id: uuid.UUID) -> bool:
+    count = (
+        await db.execute(select(func.count()).select_from(AgentActionPlan).where(AgentActionPlan.org_id == org_id))
+    ).scalar_one()
+    return count > 0
+
+
+async def get_latest_action_plan(db: AsyncSession, org_id: uuid.UUID) -> AgentActionPlan | None:
+    result = await db.execute(
+        select(AgentActionPlan).where(AgentActionPlan.org_id == org_id).order_by(AgentActionPlan.created_at.desc()).limit(1)
+    )
+    return result.scalar_one_or_none()

@@ -59,6 +59,10 @@ class GetOrderDetailsArgs(BaseModel):
     order_id: str
 
 
+class GetOnboardingProgressArgs(BaseModel):
+    pass
+
+
 class DelegateToAgentArgs(BaseModel):
     agent_key: Literal["sales_agent", "inventory_agent", "customer_agent", "marketing_agent", "operations_agent"]
     instruction: str = Field(min_length=1, max_length=500)
@@ -143,6 +147,17 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
         name="get_order_details",
         description="Look up an order's status, payment status, and items by id.",
         args_model=GetOrderDetailsArgs,
+        is_mutating=False,
+        risk_classification=None,
+    ),
+    "get_onboarding_progress": ToolSpec(
+        name="get_onboarding_progress",
+        description=(
+            "Get the merchant's onboarding journey progress: the ten steps (brand, products, "
+            "catalog, review, collections, storefront, preview, nl_edit, publish, run_business), "
+            "each with status locked/available/completed, and which one is current."
+        ),
+        args_model=GetOnboardingProgressArgs,
         is_mutating=False,
         risk_classification=None,
     ),

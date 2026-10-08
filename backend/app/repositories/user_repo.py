@@ -17,6 +17,13 @@ async def get_user_by_id(db: AsyncSession, org_id: uuid.UUID, user_id: uuid.UUID
     return result.scalar_one_or_none()
 
 
+async def mark_intro_video_seen(db: AsyncSession, user: User, *, seen_at: datetime) -> User:
+    if user.onboarding_intro_seen_at is None:
+        user.onboarding_intro_seen_at = seen_at
+        await db.flush()
+    return user
+
+
 async def create_refresh_token(
     db: AsyncSession, *, user_id: uuid.UUID, token_hash: str, expires_at: datetime
 ) -> RefreshToken:
