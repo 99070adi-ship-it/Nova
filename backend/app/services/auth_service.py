@@ -106,21 +106,7 @@ async def login(db: AsyncSession, *, email: str, password: str) -> LoginResult:
     )
 
 
-async def enter_demo(db: AsyncSession) -> LoginResult:
-    """The one-click, no-signup/no-signin public demo entry — resets the shared demo identity to
-    VELORA's rich business history (demo_service.reset_to_demo_baseline: real products,
-    collections, customers and orders already there) and issues real tokens for it, same shape as
-    login(). Onboarding itself starts genuinely incomplete, same as a fresh signup, so every
-    visitor gets NOVA's real Guide tutorial — demonstrating each step with VELORA's own data and
-    waiting for the visitor to press the real button — rather than landing in an already-finished
-    store with nothing left to do."""
-
-    from app.services import demo_service
-
-    summary = await demo_service.reset_to_demo_baseline()
-    user = await user_repo.get_user_by_email(db, summary["login_email"])
-    assert user is not None  # reset_to_demo_baseline() just created this exact user
-
+async def _issue_tokens_for(db: AsyncSession, user: User) -> LoginResult:
     access_token = create_access_token(user_id=user.id, org_id=user.org_id, role=user.role.value)
     raw_refresh = generate_refresh_token()
     await user_repo.create_refresh_token(
@@ -136,6 +122,60 @@ async def enter_demo(db: AsyncSession) -> LoginResult:
         expires_in=settings.access_token_ttl_minutes * 60,
         user=user,
     )
+
+
+async def _existing_demo_session_user(db: AsyncSession, raw_refresh_token: str | None) -> User | None:
+    """Resolves an incoming demo-login request's existing refresh cookie (if any) back to a user,
+    but ONLY if that user's own org is a real demo org (`Organization.is_demo` — a DB-level flag,
+    never inferred from slug/email string-matching, which a real signup's chosen name could
+    coincidentally collide with). This is the guard that keeps `enter_demo` from ever resuming,
+    overwriting, or otherwise touching a genuinely authenticated real user's session — if the
+    cookie belongs to a real account, this returns None exactly as if there were no cookie at
+    all, and a brand-new isolated demo workspace gets created instead."""
+    if not raw_refresh_token:
+        return None
+    token = await user_repo.get_refresh_token_by_hash(db, hash_refresh_token(raw_refresh_token))
+    if token is None or token.revoked_at is not None or token.expires_at <= utcnow():
+        return None
+    result = await db.execute(
+        select(User).join(Organization, User.org_id == Organization.id).where(
+            User.id == token.user_id, Organization.is_demo.is_(True)
+        )
+    )
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_active or user.deleted_at is not None:
+        return None
+    # Rotate the presented token now that we're resuming on it — same reuse protection refresh()
+    # gives every other session.
+    await user_repo.revoke_refresh_token(db, token, revoked_at=utcnow())
+    return user
+
+
+async def enter_demo(db: AsyncSession, raw_refresh_token: str | None = None) -> LoginResult:
+    """The one-click, no-signup/no-signin public demo entry. Isolated per visitor
+    (demo_service.create_isolated_demo_workspace: a brand-new, uniquely-slugged/emailed org seeded
+    with VELORA's rich business history — real products, collections, customers and orders) —
+    never a single shared identity that one visitor's login could wipe out from under another.
+
+    If the request's own refresh cookie already identifies a still-valid demo session
+    (`_existing_demo_session_user` above), this RESUMES that exact workspace instead of creating
+    a new one — issuing a fresh token pair for the same user, no reseed, no lost progress. That is
+    what lets a returning visitor refresh or come back later without being forced to replay the
+    whole tour from scratch. Onboarding itself starts genuinely incomplete for a brand-new
+    workspace, same as a fresh signup, so every first-time visitor gets NOVA's real Guide
+    tutorial — demonstrating each step with VELORA's own data and waiting for the visitor to press
+    the real button — rather than landing in an already-finished store with nothing left to do."""
+
+    from app.services import demo_service
+
+    existing_user = await _existing_demo_session_user(db, raw_refresh_token)
+    if existing_user is not None:
+        return await _issue_tokens_for(db, existing_user)
+
+    summary = await demo_service.create_isolated_demo_workspace()
+    user = await user_repo.get_user_by_email(db, summary["login_email"])
+    assert user is not None  # create_isolated_demo_workspace() just created this exact user
+    return await _issue_tokens_for(db, user)
 
 
 async def refresh(db: AsyncSession, *, raw_refresh_token: str) -> LoginResult:

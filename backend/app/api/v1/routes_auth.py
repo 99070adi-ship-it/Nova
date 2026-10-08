@@ -70,15 +70,16 @@ async def signup(payload: SignupRequest, response: Response, db: AsyncSession = 
 
 
 @router.post("/demo-login", response_model=TokenResponse)
-async def demo_login(response: Response, db: AsyncSession = Depends(get_db)) -> TokenResponse:
-    """Public, unauthenticated, no form to fill in — resets the shared demo identity to a blank
-    org and logs straight into it (NOVA 2.0 "no sign up or sign in" checkpoint). This is a
-    destructive, whole-database wipe on every call — deliberately so, and deliberately
-    unauthenticated; see demo_service.reset_to_blank_demo's docstring for the tradeoff this
-    accepts. Never add real multi-tenant data to this deployment without reconsidering this
-    endpoint first."""
+async def demo_login(request: Request, response: Response, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+    """Public, unauthenticated, no form to fill in — creates (or, for a returning visitor whose
+    refresh cookie still identifies a live demo session, resumes) one isolated demo workspace per
+    visitor (NOVA 2.0 "no sign up or sign in" checkpoint). Never wipes another visitor's data —
+    see auth_service.enter_demo's docstring. Passes along whatever refresh cookie is already on
+    the request, exactly like /refresh does, so a returning visitor's own workspace can be
+    resolved from it."""
 
-    result = await auth_service.enter_demo(db)
+    raw_token = request.cookies.get(_REFRESH_COOKIE_NAME)
+    result = await auth_service.enter_demo(db, raw_token)
     _set_refresh_cookie(response, result.refresh_token)
     return TokenResponse(access_token=result.access_token, expires_in=result.expires_in)
 

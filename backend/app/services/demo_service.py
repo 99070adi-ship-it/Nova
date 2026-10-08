@@ -132,22 +132,25 @@ def _copy(title: str, collection_title: str) -> tuple[str, str, str]:
     return description, f"{title} | Velora", description[:160]
 
 
-async def _seed_velora_catalog() -> dict:
+async def _seed_velora_catalog(*, org_slug: str, login_email: str, login_password: str = "changeme123") -> dict:
     """The rich business history alone — products, inventory, customers, orders, analytics,
     deliberately seeded problems. No BrandProfile, no ProductDrafts, no storefront, no AI runs —
     shared by `seed_velora_demo()` below (the dev-only reset, which adds the brand/drafts
     afterward for a developer reviewing the Create My Store review step) and
-    `reset_to_demo_baseline()` (the public demo-login, which deliberately leaves onboarding
-    itself untouched so the real Guide tutorial walks through genuinely, while Store Health
-    already has real sales/inventory/customer evidence once a visitor reaches "run the
-    business")."""
+    `create_isolated_demo_workspace()` (the public demo-login, which deliberately leaves
+    onboarding itself untouched so the real Guide tutorial walks through genuinely, while Store
+    Health already has real sales/inventory/customer evidence once a visitor reaches "run the
+    business"). `org_slug`/`login_email` are parameters rather than hardcoded literals so this can
+    seed either the one fixed dev fixture or a fresh, uniquely-identified org per public demo
+    visitor — see `create_isolated_demo_workspace()`'s docstring for why that distinction matters.
+    Always marks the org `is_demo=True` — this function is never used for a real signup."""
     async with AsyncSessionLocal() as db:
-        org = Organization(name="Velora", slug="velora")
+        org = Organization(name="Velora", slug=org_slug, is_demo=True)
         db.add(org)
         await db.flush()
 
         owner = User(
-            org_id=org.id, email="owner@velora.demo", password_hash=hash_password("changeme123"),
+            org_id=org.id, email=login_email, password_hash=hash_password(login_password),
             full_name="Owner", role=UserRole.owner,
         )
         db.add(owner)
@@ -294,7 +297,7 @@ async def _seed_velora_catalog() -> dict:
 
     return {
         "org_id": str(org_id),
-        "org_slug": "velora", "login_email": "owner@velora.demo", "login_password": "changeme123",
+        "org_slug": org_slug, "login_email": login_email, "login_password": login_password,
         "products": product_count, "collections": collection_count, "customers": customer_count,
     }
 
@@ -303,10 +306,12 @@ async def seed_velora_demo() -> dict:
     """The dev-only reset's full baseline (ARCHITECTURE.md Checkpoint 11) — the rich catalog
     above, plus a brand profile and three live ProductDrafts (one fully specified, two
     deliberately incomplete) so the known/suggested/requires_confirmation distinction is visible
-    to a developer reviewing Create My Store, not just in a test fixture. The public demo-login
-    (`reset_to_demo_baseline()` below) deliberately skips this part — see its own docstring."""
+    to a developer reviewing Create My Store, not just in a test fixture. Always seeds under the
+    one fixed dev identity (`velora`/`owner@velora.demo`) — the public demo-login
+    (`create_isolated_demo_workspace()` below) is a completely separate path that never touches
+    this identity and deliberately skips this part — see its own docstring."""
 
-    summary = await _seed_velora_catalog()
+    summary = await _seed_velora_catalog(org_slug="velora", login_email=DEMO_EMAIL, login_password=DEMO_PASSWORD)
     org_id = uuid.UUID(summary["org_id"])
 
     async with AsyncSessionLocal() as db:
@@ -343,7 +348,8 @@ async def _wipe_database(db: AsyncSession) -> None:
     # Cascades through every table transitively FK'd to `organizations` (and everything FK'd to
     # `users`/`stores` not otherwise reachable, e.g. refresh_tokens) — same statement
     # tests/conftest.py's cleanup fixture uses, proven to clear the whole dataset, not just these
-    # five tables by name.
+    # five tables by name. Only ever called from the dev-only path below — never from the public
+    # demo entry, which must never affect any other visitor's workspace.
     await db.execute(text("TRUNCATE refresh_tokens, users, brand_profiles, stores, organizations CASCADE"))
 
 
@@ -351,9 +357,10 @@ async def reset_demo() -> dict:
     """Dev-only demo reset (ARCHITECTURE.md Checkpoint 11) — wipes the entire database (every org,
     not just VELORA's — there is no reliable partial-org delete without ON DELETE CASCADE on every
     FK, and a demo reset is meant to return to a pristine state anyway) and reseeds VELORA's rich
-    mature-business baseline fresh. Gated at the route layer to `settings.env == "local"`; never
-    wire this up without that gate. Not the public demo entry point — see
-    `reset_to_blank_demo()` below, which is the one `/auth/demo-login` actually calls."""
+    mature-business baseline fresh under the one fixed dev identity. Gated at the route layer to
+    `settings.env == "local"`; never wire this up without that gate, and never call it from the
+    public demo path — see `create_isolated_demo_workspace()` below, which is what
+    `/auth/demo-login` actually calls, and which never wipes anything."""
 
     async with AsyncSessionLocal() as db:
         await _wipe_database(db)
@@ -361,37 +368,40 @@ async def reset_demo() -> dict:
     return await seed_velora_demo()
 
 
-# The one shared, public, credential-free demo identity — "keep the demo id intact" means this
-# exact email/password never changes, so it can be documented and relied on, even though the data
-# behind it is wiped and rebuilt on every single use.
+# The dev-only fixture identity `/dev/demo-reset` always reseeds under — fixed and shared on
+# purpose, since that route is for a developer's own local workflow, never exposed publicly.
 DEMO_EMAIL = "owner@velora.demo"
 DEMO_PASSWORD = "changeme123"
 
 
-async def reset_to_demo_baseline() -> dict:
-    """Called from `auth_service.enter_demo()` on every `/auth/demo-login` request — deliberately
-    unauthenticated and ungated (unlike `reset_demo()` above's dev-only route). Wipes the database
-    and reseeds VELORA's rich business history ONLY (`_seed_velora_catalog()` — the same 26
-    products, 5 collections, real customers/orders, deliberately seeded problems as the dev-only
-    reset) — deliberately WITHOUT a brand profile, without resolving any ProductDraft, without
-    generating a storefront, without running Store Health. Onboarding is therefore genuinely
-    incomplete, step 1 ("brand"), exactly like a fresh signup: the real mandatory Guide pipeline
-    (App.tsx's RequireOnboardingComplete) walks the visitor through it for real, with NOVA
-    demonstrating each step using VELORA's real info and the visitor pressing the real button
-    each time (FirstProductLesson.tsx's demo -> explain -> user_turn -> verify pattern).
+async def create_isolated_demo_workspace() -> dict:
+    """Called from `auth_service.enter_demo()` for a visitor with no existing (or no longer valid)
+    demo session — the public, unauthenticated `/auth/demo-login` entry point. Unlike the old
+    shared-identity design this replaces, this NEVER wipes anything: it additively creates one
+    brand-new org (`is_demo=True`), uniquely slugged and uniquely emailed so it can never collide
+    with another visitor's workspace or with the dev fixture above, then seeds VELORA's rich
+    business history (`_seed_velora_catalog()` — the same 26 products, 5 collections, real
+    customers/orders, deliberately seeded problems) under it — deliberately WITHOUT a brand
+    profile, without resolving any ProductDraft, without generating a storefront, without running
+    Store Health. Onboarding is therefore genuinely incomplete, step 1 ("brand"), exactly like a
+    fresh signup: the real mandatory Guide pipeline (App.tsx's RequireOnboardingComplete) walks
+    the visitor through it for real, with NOVA demonstrating each step using VELORA's real info
+    and the visitor pressing the real button each time.
 
     The payoff for seeding the rich catalog ahead of the tutorial rather than leaving the org
     completely empty: by the time the visitor reaches "run the business" (the tutorial's own real
     "How is my store doing?" step) and presses that button themselves, Store Health has genuine
     history to analyze — the real low-stock/declining-collection/churn-risk conditions seeded
-    above — not a suspiciously empty store. "AI working on VELORA" is something the visitor
-    triggers themselves at the step built for it, not something pre-computed before they arrive.
+    above — not a suspiciously empty store.
 
-    Known tradeoff: this is the *same* identity `reset_demo()` (the dev-only route) also seeds.
-    Whichever of the two ran most recently wins — acceptable for a single-tenant portfolio demo;
-    would need a genuinely separate identity for this to serve two purposes simultaneously."""
+    Known, accepted limitation: nothing here ever deletes an abandoned demo org. There is no
+    `ON DELETE CASCADE` on any FK rooted at `organizations` (confirmed — no migration sets one),
+    so a correct, scoped single-org delete would need either a schema migration adding it
+    everywhere (large blast radius) or a hand-maintained, strictly-ordered multi-table delete (a
+    real risk of silently leaving orphaned rows if a future table is added and this isn't kept in
+    sync). Given this is a portfolio demo, not a production multi-tenant system, unbounded
+    low-volume demo-org growth in Postgres is an acceptable tradeoff; a real cleanup sweep is a
+    deliberate follow-up decision, not something to shortcut here."""
 
-    async with AsyncSessionLocal() as db:
-        await _wipe_database(db)
-        await db.commit()
-    return await _seed_velora_catalog()
+    short_id = uuid.uuid4().hex[:10]
+    return await _seed_velora_catalog(org_slug=f"velora-demo-{short_id}", login_email=f"owner+{short_id}@velora.demo")
