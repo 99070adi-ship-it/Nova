@@ -20,12 +20,20 @@ function LocationDisplay() {
   return <div data-testid="location">{location.pathname}</div>;
 }
 
-function renderWidget(initialPath = "/overview") {
+// The "brand" lesson's real last-demo-action target (admin/src/lib/novaLessons.ts) — a stand-in
+// for the real BrandInputForm's submit button so the widget's pre-flight check finds something
+// real to spotlight, same as it would on the actual /create-store page.
+function BrandSaveStub() {
+  return <button data-nova-target="brand_form.save">Continue to products</button>;
+}
+
+function renderWidget(initialPath = "/overview", { withBrandTarget = true }: { withBrandTarget?: boolean } = {}) {
   const queryClient = new QueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[initialPath]}>
         <LocationDisplay />
+        {withBrandTarget && <BrandSaveStub />}
         <NovaGuideWidget />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -40,7 +48,7 @@ describe("NovaGuideWidget — docked chat bubble that bounces into the active gu
 
     await waitFor(() => expect(screen.getByText("Ask me anything")).toBeInTheDocument());
     expect(screen.queryByText("DEMONSTRATING")).not.toBeInTheDocument();
-    expect(screen.queryByText("YOUR TURN")).not.toBeInTheDocument();
+    expect(screen.queryByText("WAITING FOR YOU")).not.toBeInTheDocument();
     expect(startConversation).not.toHaveBeenCalled();
   });
 
@@ -75,6 +83,63 @@ describe("NovaGuideWidget — docked chat bubble that bounces into the active gu
     await waitFor(() => expect(screen.getByText(/Step 1 of \d+/)).toBeInTheDocument(), { timeout: 10000 });
   }, 15000);
 
+  it("states the exact next action to click, not a generic placeholder", async () => {
+    vi.mocked(getOnboardingProgress).mockResolvedValue({
+      steps: [{ key: "brand", title: "Tell NOVA about your business", status: "available" }],
+      current_step: "brand",
+      intro_video_seen: true,
+    });
+
+    renderWidget("/create-store");
+
+    // Shown once NOVA reaches "explain" (requirement 1) — the real button's own exact label,
+    // authored in novaLessons.ts, not left to whatever the narration text happens to say.
+    await waitFor(
+      () => expect(screen.getByText((text) => text.includes('"Continue to products"'))).toBeInTheDocument(),
+      { timeout: 10000 },
+    );
+    expect(screen.queryByText(/let's get started/i)).not.toBeInTheDocument();
+  }, 15000);
+
+  it("does not pretend the step is ready when the real target genuinely can't be found, and offers a retry", async () => {
+    vi.mocked(getOnboardingProgress).mockResolvedValue({
+      steps: [{ key: "brand", title: "Tell NOVA about your business", status: "available" }],
+      current_step: "brand",
+      intro_video_seen: true,
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    renderWidget("/create-store", { withBrandTarget: false });
+
+    await waitFor(() => expect(screen.getByText(/can't find the right control/i)).toBeInTheDocument(), {
+      timeout: 10000,
+    });
+    expect(screen.getByText("Try again")).toBeInTheDocument();
+    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('data-nova-target="brand_form.save"'));
+    // Never silently proceeds into a demo that would spotlight nothing.
+    expect(screen.queryByText("DEMONSTRATING")).not.toBeInTheDocument();
+
+    consoleError.mockRestore();
+  }, 15000);
+
+  it("keeps the spotlighted control clickable — the overlay never blocks real interaction with it", async () => {
+    vi.mocked(getOnboardingProgress).mockResolvedValue({
+      steps: [{ key: "brand", title: "Tell NOVA about your business", status: "available" }],
+      current_step: "brand",
+      intro_video_seen: true,
+    });
+
+    renderWidget("/create-store");
+
+    await waitFor(() => expect(screen.getByText("WAITING FOR YOU")).toBeInTheDocument(), { timeout: 10000 });
+
+    const target = screen.getByText("Continue to products");
+    const handleClick = vi.fn();
+    target.addEventListener("click", handleClick);
+    fireEvent.click(target);
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  }, 15000);
+
   it("retracts back to the dock only once the lesson is genuinely complete — never merely from time passing", async () => {
     let completed = false;
     vi.mocked(getOnboardingProgress).mockImplementation(() =>
@@ -90,7 +155,7 @@ describe("NovaGuideWidget — docked chat bubble that bounces into the active gu
     await waitFor(() => expect(screen.getByText(/Step 1 of \d+/)).toBeInTheDocument(), { timeout: 10000 });
     expect(screen.queryByText("Ask me anything")).not.toBeInTheDocument();
 
-    await waitFor(() => expect(screen.getByText("YOUR TURN")).toBeInTheDocument(), { timeout: 10000 });
+    await waitFor(() => expect(screen.getByText("WAITING FOR YOU")).toBeInTheDocument(), { timeout: 10000 });
     // Real backend state still says incomplete — waiting here, however long, must never retract
     // on its own.
     await new Promise((r) => setTimeout(r, 500));

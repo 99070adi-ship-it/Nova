@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, fireEvent, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { useNovaLesson } from "./useNovaLesson";
 
@@ -34,22 +34,23 @@ describe("useNovaLesson — demo -> explain -> user_turn -> verify -> complete",
     expect(config.completeNarration).not.toHaveBeenCalled();
   });
 
-  it("only polls verify() once in user_turn — never during demo or explain", async () => {
+  it("polls verify() repeatedly once in user_turn — never during demo or explain", async () => {
     const verify = vi.fn().mockResolvedValue(false);
     const config = baseConfig({ verify, pollMs: 15 });
     const { result } = renderHook(() => useNovaLesson(config));
 
-    const startPromise = act(async () => {
+    await act(async () => {
       await result.current.start();
     });
-    // While start() is still resolving demo/explain, no verify polling should have run yet —
-    // verified implicitly by start() completing before any poll interval could fire given the
-    // synchronous mocked narration calls above.
-    await startPromise;
-    expect(verify).not.toHaveBeenCalled();
+    // demoNarration/explainNarration (mocked synchronous) are what start() actually awaits before
+    // reaching user_turn — verify is never part of that path, only referenced inside the
+    // user_turn watcher effect below, which fires its first (immediate, for responsiveness) check
+    // only once user_turn is actually entered.
+    const callsAtUserTurn = verify.mock.calls.length;
+    expect(callsAtUserTurn).toBeGreaterThan(0);
 
     await new Promise((r) => setTimeout(r, 50));
-    expect(verify.mock.calls.length).toBeGreaterThan(0);
+    expect(verify.mock.calls.length).toBeGreaterThan(callsAtUserTurn);
   });
 
   it("transitions to complete only once verify() genuinely returns true — the server, not a client flag", async () => {
@@ -104,8 +105,26 @@ describe("useNovaLesson — demo -> explain -> user_turn -> verify -> complete",
     expect(config.demoNarration).toHaveBeenCalledTimes(1);
   });
 
-  it("spotlights midTurnSpotlightTarget once it appears in the DOM during user_turn, for a step needing a second real action", async () => {
-    const config = baseConfig({ midTurnSpotlightTarget: "nl_edit_form.apply", pollMs: 10 });
+  it("keeps the real userTurnTarget spotlighted for the whole of user_turn, not just during NOVA's own demo", async () => {
+    const target = document.createElement("button");
+    target.setAttribute("data-nova-target", "brand_form.save");
+    document.body.appendChild(target);
+
+    const config = baseConfig({ userTurnTarget: "brand_form.save" });
+    const { result } = renderHook(() => useNovaLesson(config));
+
+    await act(async () => {
+      await result.current.start();
+    });
+
+    await waitFor(() => expect(result.current.phase).toBe("user_turn"));
+    await waitFor(() => expect(result.current.spotlightRect).not.toBeNull());
+    expect(result.current.activeTarget).toBe("brand_form.save");
+    target.remove();
+  });
+
+  it("spotlights secondUserTurnTarget once it appears in the DOM, for a step needing a second real action", async () => {
+    const config = baseConfig({ secondUserTurnTarget: "nl_edit_form.apply", pollMs: 10 });
     const { result } = renderHook(() => useNovaLesson(config));
 
     await act(async () => {
@@ -121,6 +140,55 @@ describe("useNovaLesson — demo -> explain -> user_turn -> verify -> complete",
     document.body.appendChild(applyButton);
 
     await waitFor(() => expect(result.current.spotlightRect).not.toBeNull());
+    expect(result.current.activeTarget).toBe("nl_edit_form.apply");
     applyButton.remove();
+  });
+
+  it("gives immediate feedback on a real click without completing on its own — only verify() can complete it", async () => {
+    const target = document.createElement("button");
+    target.setAttribute("data-nova-target", "product_form.save");
+    document.body.appendChild(target);
+
+    const config = baseConfig({ userTurnTarget: "product_form.save", verify: vi.fn().mockResolvedValue(false) });
+    const { result } = renderHook(() => useNovaLesson(config));
+
+    await act(async () => {
+      await result.current.start();
+    });
+    await waitFor(() => expect(result.current.phase).toBe("user_turn"));
+
+    act(() => fireEvent.click(target));
+    await waitFor(() => expect(result.current.phase).toBe("verifying"));
+
+    // Immediate feedback shown, but the real backend still says incomplete — must never advance
+    // to complete just because a click happened.
+    await new Promise((r) => setTimeout(r, 40));
+    expect(result.current.phase).not.toBe("complete");
+    expect(config.completeNarration).not.toHaveBeenCalled();
+    target.remove();
+  });
+
+  it("surfaces error/retry if verification never succeeds, and retry() resumes watching for real completion", async () => {
+    let verified = false;
+    const config = baseConfig({
+      verify: vi.fn(() => Promise.resolve(verified)),
+      pollMs: 10,
+      stuckTimeoutMs: 30, // short for the test — production uses a much longer default
+    });
+    const { result } = renderHook(() => useNovaLesson(config));
+
+    await act(async () => {
+      await result.current.start();
+    });
+    await waitFor(() => expect(result.current.phase).toBe("user_turn"));
+
+    await waitFor(() => expect(result.current.phase).toBe("error"), { timeout: 2000 });
+
+    act(() => result.current.retry());
+    expect(result.current.phase).toBe("user_turn");
+
+    // Retrying doesn't fake success — only the real backend state can still complete it.
+    verified = true;
+    await waitFor(() => expect(result.current.phase).toBe("complete"), { timeout: 2000 });
   });
 });

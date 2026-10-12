@@ -2,8 +2,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getOnboardingProgress, postMessage, startConversation } from "../api/client";
-import { getLessonStep, LESSON_STEPS, type LessonStep } from "../lib/novaLessons";
-import { waitForTarget } from "../lib/novaUiActions";
+import { getLessonStep, LESSON_STEPS, primaryActionTarget, type LessonStep } from "../lib/novaLessons";
+import { getTarget, waitForTarget } from "../lib/novaUiActions";
 import { useNovaLesson } from "../hooks/useNovaLesson";
 import NovaFace from "./NovaFace";
 import NovaSpotlight from "./NovaSpotlight";
@@ -25,9 +25,20 @@ const PHASE_LABEL: Record<string, string> = {
   idle: "GETTING READY",
   demo: "DEMONSTRATING",
   explain: "EXPLAINING",
-  user_turn: "YOUR TURN",
+  user_turn: "WAITING FOR YOU",
   verifying: "CHECKING…",
+  error: "NEED ANOTHER TRY",
   complete: "DONE",
+};
+
+// The structured "Next: Click X" instruction is shown from EXPLAIN onward — by then NOVA has
+// already said why, so showing exactly which real button to press reinforces it rather than
+// pre-empting the demo itself.
+const SHOWS_NEXT_ACTION: Record<string, boolean> = {
+  explain: true,
+  user_turn: true,
+  verifying: true,
+  error: true,
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -57,8 +68,8 @@ function boxPosition(rect: DOMRect | null): { left: number; top: number } {
 
 /** Runs one lesson step to completion against the real page (navigating there first if needed),
  * then calls onDone — see hooks/useNovaLesson.ts for the demo -> explain -> user_turn -> verify ->
- * complete state machine this drives. A fresh instance mounts per step (NovaGuideWidget keys it
- * by step.key), so each step gets its own clean run.
+ * complete (-> error/retry) state machine this drives. A fresh instance mounts per step
+ * (NovaGuideWidget keys it by step.key), so each step gets its own clean run.
  *
  * Spatial continuity: `dockOrigin` is the real bottom-right launcher's last measured position —
  * on mount, the box paints there first (no transition), then two animation frames later animates
@@ -84,6 +95,7 @@ function LessonRunner({
   const startedRef = useRef(false);
   const [springingIn, setSpringingIn] = useState(!!dockOrigin);
   const [retracting, setRetracting] = useState(false);
+  const [targetMissing, setTargetMissing] = useState(false);
 
   async function narrate(prompt: string): Promise<string> {
     if (!conversationId.current) {
@@ -94,6 +106,8 @@ function LessonRunner({
     return result.assistant_text;
   }
 
+  const userTurnTarget = primaryActionTarget(step);
+
   const lesson = useNovaLesson({
     demoActions: step.demoActions,
     demoNarration: () => narrate(step.demoPrompt),
@@ -103,22 +117,33 @@ function LessonRunner({
       return progress.steps.find((s) => s.key === step.key)?.status === "completed";
     },
     completeNarration: () => narrate(step.completePrompt),
-    midTurnSpotlightTarget: step.midTurnSpotlightTarget,
+    userTurnTarget,
+    secondUserTurnTarget: step.secondUserTurnTarget,
   });
+
+  // Pre-flight: never start a demo that would silently spotlight nothing. If the real control
+  // this lesson needs still isn't on the page after navigating and waiting, say so plainly, log
+  // why for debugging, and offer a real retry — this is requirement 2's "do not pretend the step
+  // is ready", not the user_turn verification failure path (that's the hook's own error/retry).
+  async function attemptStart() {
+    setTargetMissing(false);
+    if (!location.pathname.startsWith(step.path)) navigate(step.path);
+    if (userTurnTarget) await waitForTarget(userTurnTarget);
+    if (userTurnTarget && !getTarget(userTurnTarget)) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[NovaGuide] Could not find data-nova-target="${userTurnTarget}" for step "${step.key}" on ${step.path} after navigating — the lesson cannot demonstrate this action.`,
+      );
+      setTargetMissing(true);
+      return;
+    }
+    void lesson.start();
+  }
 
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    let cancelled = false;
-    (async () => {
-      if (!location.pathname.startsWith(step.path)) navigate(step.path);
-      const firstTarget = step.demoActions.find((a) => a.target)?.target;
-      if (firstTarget) await waitForTarget(firstTarget);
-      if (!cancelled) void lesson.start();
-    })();
-    return () => {
-      cancelled = true;
-    };
+    void attemptStart();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -157,9 +182,14 @@ function LessonRunner({
   const width = atDock ? dockOrigin.width : BOX_WIDTH;
   const stepIndex = LESSON_STEPS.findIndex((s) => s.key === step.key);
 
+  const currentActionLabel =
+    lesson.activeTarget && lesson.activeTarget === step.secondUserTurnTarget
+      ? step.secondActionLabel ?? step.nextActionLabel
+      : step.nextActionLabel;
+
   return (
     <>
-      <NovaSpotlight rect={retracting ? null : lesson.spotlightRect} />
+      <NovaSpotlight rect={retracting || targetMissing ? null : lesson.spotlightRect} />
       <div
         className="fixed z-50 overflow-hidden rounded-lg border border-neutral-200 bg-white p-4 shadow-xl"
         style={{
@@ -169,22 +199,70 @@ function LessonRunner({
           transition: springingIn ? "none" : BOX_MOVE_TRANSITION,
         }}
       >
-        <div className="flex items-start gap-3">
-          <NovaFace
-            talking={lesson.phase === "demo" || lesson.phase === "explain" || lesson.phase === "verifying" || lesson.phase === "complete"}
-            look={lesson.phase === "demo" ? "down" : "center"}
-          />
-          <div className="flex-1">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-amber-600">
-              {PHASE_LABEL[lesson.phase] ?? ""}
-            </p>
-            <p className="mt-0.5 text-sm text-neutral-700">{lesson.message ?? step.title}</p>
+        {targetMissing ? (
+          <div className="flex items-start gap-3">
+            <NovaFace talking look="center" />
+            <div className="flex-1">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-red-600">CAN'T FIND THAT YET</p>
+              <p className="mt-0.5 text-sm text-neutral-700">
+                I can't find the right control on this page yet — it may still be loading.
+              </p>
+              <button
+                onClick={() => void attemptStart()}
+                className="mt-2 rounded-md border border-neutral-300 px-3 py-1 text-xs font-medium hover:bg-neutral-100"
+              >
+                Try again
+              </button>
+            </div>
           </div>
-        </div>
-        {stepIndex >= 0 && (
-          <p className="mt-3 border-t border-neutral-100 pt-2 text-[11px] font-medium text-neutral-400">
-            Step {stepIndex + 1} of {LESSON_STEPS.length} — {step.title}
-          </p>
+        ) : (
+          <>
+            <div className="flex items-start gap-3">
+              <NovaFace
+                talking={lesson.phase === "demo" || lesson.phase === "explain" || lesson.phase === "verifying" || lesson.phase === "complete"}
+                look={lesson.phase === "demo" ? "down" : "center"}
+              />
+              <div className="flex-1">
+                <p
+                  className={
+                    lesson.phase === "error"
+                      ? "text-[11px] font-medium uppercase tracking-wide text-red-600"
+                      : "text-[11px] font-medium uppercase tracking-wide text-amber-600"
+                  }
+                >
+                  {PHASE_LABEL[lesson.phase] ?? ""}
+                </p>
+                <p className="mt-0.5 text-sm text-neutral-700">
+                  {lesson.phase === "error"
+                    ? "That doesn't seem to have gone through yet — check the form for anything NOVA can't fill in for you, then try again."
+                    : lesson.message ?? step.title}
+                </p>
+              </div>
+            </div>
+
+            {SHOWS_NEXT_ACTION[lesson.phase] && (
+              <div className="mt-3 border-t border-neutral-100 pt-2">
+                <p className="text-xs font-medium text-neutral-800">
+                  Next: click <span className="font-semibold">"{currentActionLabel}"</span>
+                </p>
+                <p className="mt-0.5 text-[11px] text-neutral-400">{step.afterActionHint}</p>
+                {lesson.phase === "error" && (
+                  <button
+                    onClick={lesson.retry}
+                    className="mt-2 rounded-md border border-neutral-300 px-3 py-1 text-xs font-medium hover:bg-neutral-100"
+                  >
+                    Try again
+                  </button>
+                )}
+              </div>
+            )}
+
+            {stepIndex >= 0 && (
+              <p className="mt-3 border-t border-neutral-100 pt-2 text-[11px] font-medium text-neutral-400">
+                Step {stepIndex + 1} of {LESSON_STEPS.length} — {step.title}
+              </p>
+            )}
+          </>
         )}
       </div>
     </>
