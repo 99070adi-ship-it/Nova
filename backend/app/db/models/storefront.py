@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, text
 from sqlalchemy.dialects.postgresql import ENUM as PGEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -40,6 +40,14 @@ class StorefrontVersion(Base, UUIDPKMixin, TimestampMixin):
         default=GeneratedBy.owner,
     )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set once, the first time this draft's preview has actually loaded and rendered in the
+    # storefront app (POST /public/preview/{id}/loaded). Backs the onboarding `preview` step — a
+    # real, server-recorded event rather than a derivation from "a draft exists".
+    preview_loaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # True only for the pre-seeded live version a demo workspace starts with. It is a real `live`
+    # version, served by the same public API and renderer as any other, but it must never count as
+    # the owner having published — onboarding's `publish` step requires a non-baseline live version.
+    is_seed_baseline: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
 
     pages: Mapped[list["StorePage"]] = relationship(back_populates="storefront_version", cascade="all, delete-orphan")
     theme: Mapped["StoreTheme"] = relationship(back_populates="storefront_version", uselist=False, cascade="all, delete-orphan")

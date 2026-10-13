@@ -157,6 +157,8 @@ async def accept_product_draft(db: AsyncSession, org_id: uuid.UUID, draft_id: uu
     sku = draft.fields.get("sku")
     if not title or price is None or not sku:
         raise ValidationDomainError("Draft needs at least title, price, and sku before it can be accepted")
+    if await product_repo.sku_taken(db, org_id, sku):
+        raise ConflictError(f"SKU {sku} is already used by another product in this store")
 
     product = await product_repo.create_product(
         db, org_id,

@@ -35,6 +35,7 @@ from app.db.models import (
     Collection,
     CollectionProduct,
     Customer,
+    GeneratedBy,
     Inventory,
     InventoryLocation,
     Order,
@@ -46,11 +47,12 @@ from app.db.models import (
     ProductStatus,
     ProductVariant,
     Store,
+    StorefrontVersionStatus,
     User,
     UserRole,
 )
 from app.db.session import AsyncSessionLocal
-from app.repositories import analytics_repo
+from app.repositories import analytics_repo, storefront_repo
 from app.schemas.store_creation import BrandInput, ProductDraftInput
 from app.services import product_agent_service, store_creation_service
 
@@ -122,6 +124,40 @@ CUSTOMERS = [
 CHURN_RISK_START_INDEX = 7
 
 
+# The published VELORA storefront every demo workspace starts with — a real `live` StorefrontVersion
+# in the same tables, served by the same public API and rendered by the same storefront app as any
+# merchant's store. It is written with the same section types the renderer supports (hero,
+# brand_story, product_grid) and the same theme tokens Store Builder edits; there is no
+# demo-only rendering path. It is flagged `is_seed_baseline` so it never counts as the owner's own
+# publish for onboarding, and it stays live while the owner builds a separate draft.
+VELORA_BASELINE_PAGES = [
+    {
+        "slug": "home", "title": "Home", "order": 0,
+        "sections": [
+            {"type": "hero", "order": 0, "configuration": {
+                "headline": "Quiet leather, made to last.",
+                "subheadline": "Handbags, wallets and leather accessories for people who buy once and carry for years.",
+                "cta_text": "Shop the collection", "cta_href": "/products",
+            }},
+            {"type": "product_grid", "order": 1, "configuration": {"title": "The edit", "collection_id": None, "limit": 8}},
+            {"type": "brand_story", "order": 2, "configuration": {
+                "heading": "Made slowly, worn for years.",
+                "body": (
+                    "Velora designs considered leather goods in warm neutrals and soft structure. Every piece is cut "
+                    "from full-grain and pebbled leather and finished by hand, built to age well rather than chase trends."
+                ),
+            }},
+        ],
+    }
+]
+VELORA_BASELINE_THEME = {
+    "primary_color": "#2A1D15",
+    "background_color": "#F3EEE6",
+    "font_family": "'Cormorant Garamond', Georgia, serif",
+    "border_radius": "2px",
+}
+
+
 def _slug(title: str) -> str:
     return title.lower().replace(" ", "-").replace("&", "and")
 
@@ -134,7 +170,8 @@ def _copy(title: str, collection_title: str) -> tuple[str, str, str]:
 
 async def _seed_velora_catalog(*, org_slug: str, login_email: str, login_password: str = "changeme123") -> dict:
     """The rich business history alone — products, inventory, customers, orders, analytics,
-    deliberately seeded problems. No BrandProfile, no ProductDrafts, no storefront, no AI runs —
+    deliberately seeded problems, plus one published VELORA baseline storefront (a real live
+    version flagged `is_seed_baseline`; no draft exists yet). No BrandProfile, no ProductDrafts, no AI runs —
     shared by `seed_velora_demo()` below (the dev-only reset, which adds the brand/drafts
     afterward for a developer reviewing the Create My Store review step) and
     `create_isolated_demo_workspace()` (the public demo-login, which deliberately leaves
@@ -189,7 +226,7 @@ async def _seed_velora_catalog(*, org_slug: str, login_email: str, login_passwor
                 await db.flush()
 
                 sku = f"{''.join(w[0] for w in title.split())}-{uuid.uuid4().hex[:4].upper()}"
-                variant = ProductVariant(product_id=product.id, sku=sku, price=price, cost=round(price * 0.4, 2))
+                variant = ProductVariant(org_id=org.id, product_id=product.id, sku=sku, price=price, cost=round(price * 0.4, 2))
                 db.add(variant)
                 await db.flush()
 
@@ -285,6 +322,12 @@ async def _seed_velora_catalog(*, org_slug: str, login_email: str, login_passwor
                 org_id=org.id, event_type=AnalyticsEventType.hero_click,
                 created_at=utcnow() - timedelta(days=random.randint(0, 30), hours=random.randint(0, 20)),
             ))
+
+        await storefront_repo.create_version(
+            db, org.id, status=StorefrontVersionStatus.live, generated_by=GeneratedBy.owner,
+            pages=VELORA_BASELINE_PAGES, theme_tokens=VELORA_BASELINE_THEME, published_at=utcnow(),
+            is_seed_baseline=True,
+        )
 
         await db.commit()
         await analytics_repo.recompute_daily_metrics(db, org.id)
@@ -382,7 +425,8 @@ async def create_isolated_demo_workspace() -> dict:
     with another visitor's workspace or with the dev fixture above, then seeds VELORA's rich
     business history (`_seed_velora_catalog()` — the same 26 products, 5 collections, real
     customers/orders, deliberately seeded problems) under it — deliberately WITHOUT a brand
-    profile, without resolving any ProductDraft, without generating a storefront, without running
+    profile, without resolving any ProductDraft, without generating a storefront draft (the published
+    baseline above is already live and stays live while the visitor builds their own draft), without running
     Store Health. Onboarding is therefore genuinely incomplete, step 1 ("brand"), exactly like a
     fresh signup: the real mandatory Guide pipeline (App.tsx's RequireOnboardingComplete) walks
     the visitor through it for real, with NOVA demonstrating each step using VELORA's real info

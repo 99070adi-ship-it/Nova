@@ -1,8 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
 import { NavLink, Outlet } from "react-router-dom";
 import clsx from "clsx";
 import NovaGuideWidget from "./NovaGuideWidget";
-import { getOnboardingProgress } from "../api/client";
 import { useAuth } from "../lib/auth";
 import { liveStorefrontUrl } from "../lib/storefrontUrl";
 
@@ -66,22 +64,9 @@ const NAV_GROUPS: NavGroup[] = [
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
-  // The whole-onboarding-workflow setup: while a real step is in progress, everything that isn't
-  // the current task — the nav sidebar, the header — blurs and goes inert, the same focus
-  // treatment NovaGuideWidget's own NovaSpotlight already gives one element during an active
-  // demonstration, just applied at the layout level for the full pipeline, every step, not only
-  // one lesson. `<main>` (whatever task is actually on screen) is never touched by this — it's
-  // the one thing that's supposed to stay in focus.
-  const { data: progress } = useQuery({ queryKey: ["onboarding-progress"], queryFn: getOnboardingProgress });
-  const inWorkflow = !!progress && progress.current_step !== null;
-  const chromeClass = clsx(
-    "transition-[filter,opacity] duration-500",
-    inWorkflow && "pointer-events-none blur-sm opacity-50",
-  );
-
   return (
     <div className="flex min-h-screen">
-      <aside className={clsx("w-56 shrink-0 border-r border-neutral-200 bg-white px-3 py-4", chromeClass)}>
+      <aside className="w-56 shrink-0 border-r border-neutral-200 bg-white px-3 py-4">
         <div className="mb-6 px-2">
           <span className="text-sm font-semibold">NOVA</span>
         </div>
@@ -124,7 +109,7 @@ export default function AppLayout() {
         </nav>
       </aside>
       <div className="flex-1">
-        <header className={clsx("flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3", chromeClass)}>
+        <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
           <a href="/" className="text-sm text-neutral-500 hover:text-neutral-900">
             Watch NOVA in action
           </a>
@@ -139,11 +124,11 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
-      {/* Global and persistent across every route — docked bottom-right by default, bounces up
+      {/* Global and persistent across every route — docked bottom-right by default, springs up
           into the full guide box the instant a real onboarding step is available (see
-          NovaGuideWidget.tsx), then docks back down as an ordinary help/FAQ chat once the whole
-          ten-step tour is done. Rendered once here rather than per-page, so it survives the
-          cross-page navigation the tour itself now drives. */}
+          NovaGuideWidget.tsx), then docks back down as an ordinary help/FAQ chat once every
+          server-defined step is done. Rendered once here rather than per-page, so it survives
+          cross-page navigation. The app chrome is never blurred or disabled. */}
       <NovaGuideWidget />
     </div>
   );

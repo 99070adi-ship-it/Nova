@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getOnboardingProgress, postMessage, startConversation } from "../api/client";
-import { getLessonStep, LESSON_STEPS, primaryActionTarget, type LessonStep } from "../lib/novaLessons";
+import { getLessonStep, primaryActionTarget, type LessonStep } from "../lib/novaLessons";
 import { getTarget, waitForTarget } from "../lib/novaUiActions";
 import { useNovaLesson } from "../hooks/useNovaLesson";
 import NovaFace from "./NovaFace";
@@ -83,11 +83,17 @@ function LessonRunner({
   step,
   conversationId,
   dockOrigin,
+  autoNavigate,
   onDone,
 }: {
   step: LessonStep;
   conversationId: React.MutableRefObject<string | null>;
   dockOrigin: DockRect | null;
+  /** True when the Guide may take the visitor to this step's page by itself: right after signing
+   * in, or right after the previous step finished. False on a plain page load/refresh somewhere
+   * else — then the Guide waits for the visitor to choose to continue, so direct route access and
+   * refreshes are never hijacked. */
+  autoNavigate: boolean;
   onDone: () => void;
 }) {
   const navigate = useNavigate();
@@ -96,6 +102,13 @@ function LessonRunner({
   const [springingIn, setSpringingIn] = useState(!!dockOrigin);
   const [retracting, setRetracting] = useState(false);
   const [targetMissing, setTargetMissing] = useState(false);
+  // The sequence (count, order, titles) comes from the server's progress payload, never from this
+  // file's lesson list — see lib/novaLessons.ts. Same query key the rest of the app polls.
+  const { data: progress } = useQuery({ queryKey: ["onboarding-progress"], queryFn: getOnboardingProgress });
+  const away = !location.pathname.startsWith(step.path);
+  const awayRef = useRef(away);
+  awayRef.current = away;
+  const [held, setHeld] = useState(!autoNavigate && away);
 
   async function narrate(prompt: string): Promise<string> {
     if (!conversationId.current) {
@@ -119,6 +132,7 @@ function LessonRunner({
     completeNarration: () => narrate(step.completePrompt),
     userTurnTarget,
     secondUserTurnTarget: step.secondUserTurnTarget,
+    isAway: () => awayRef.current,
   });
 
   // Pre-flight: never start a demo that would silently spotlight nothing. If the real control
@@ -141,11 +155,17 @@ function LessonRunner({
   }
 
   useEffect(() => {
-    if (startedRef.current) return;
+    if (startedRef.current || held) return;
     startedRef.current = true;
     void attemptStart();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [held]);
+
+  // Held on a page that isn't this step's: if the visitor gets to the step's page on their own,
+  // the tour simply continues from there.
+  useEffect(() => {
+    if (held && !away) setHeld(false);
+  }, [held, away]);
 
   // Spring-in: painted at the dock's exact position/size on the first frame (no transition —
   // nothing to animate yet, it just needs to start there), then two frames later flips to false,
@@ -180,16 +200,52 @@ function LessonRunner({
   const atDock = (retracting || springingIn) && dockOrigin;
   const pos = atDock ? { left: dockOrigin.left, top: dockOrigin.top } : boxPosition(lesson.spotlightRect);
   const width = atDock ? dockOrigin.width : BOX_WIDTH;
-  const stepIndex = LESSON_STEPS.findIndex((s) => s.key === step.key);
+  const serverIndex = progress ? progress.steps.findIndex((s) => s.key === step.key) : -1;
+  const stepNumber = serverIndex >= 0 ? serverIndex + 1 : null;
+  const stepTotal = progress?.total_steps ?? null;
+  const stepTitle = (serverIndex >= 0 ? progress?.steps[serverIndex].title : undefined) ?? step.title;
+  const showReturn = away && !retracting && ["explain", "user_turn", "verifying", "error"].includes(lesson.phase);
 
   const currentActionLabel =
     lesson.activeTarget && lesson.activeTarget === step.secondUserTurnTarget
       ? step.secondActionLabel ?? step.nextActionLabel
       : step.nextActionLabel;
 
+  if (held) {
+    return (
+      <div
+        className="fixed bottom-6 right-6 z-50 w-80 rounded-lg border border-neutral-200 bg-white p-4 shadow-xl"
+        data-testid="guide-held"
+      >
+        <div className="flex items-start gap-3">
+          <NovaFace look="center" />
+          <div className="flex-1">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-amber-600">GUIDED TOUR PAUSED</p>
+            <p className="mt-0.5 text-sm text-neutral-700">
+              {stepNumber && stepTotal ? `Next up, step ${stepNumber} of ${stepTotal}: ` : "Next up: "}
+              {stepTitle}. Look around freely; I'll pick up whenever you're ready.
+            </p>
+            <button
+              onClick={() => {
+                setHeld(false);
+                navigate(step.path);
+              }}
+              className="mt-2 rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white"
+            >
+              Continue the tour
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
-      <NovaSpotlight rect={retracting || targetMissing ? null : lesson.spotlightRect} />
+      <NovaSpotlight
+        rect={retracting || targetMissing || away ? null : lesson.spotlightRect}
+        mode={lesson.phase === "demo" ? "focus" : "cue"}
+      />
       <div
         className="fixed z-50 overflow-hidden rounded-lg border border-neutral-200 bg-white p-4 shadow-xl"
         style={{
@@ -257,9 +313,21 @@ function LessonRunner({
               </div>
             )}
 
-            {stepIndex >= 0 && (
+            {showReturn && (
+              <div className="mt-3 border-t border-neutral-100 pt-2" data-testid="guide-return">
+                <p className="text-xs text-neutral-600">You've stepped away from this step. Your progress is saved.</p>
+                <button
+                  onClick={() => navigate(step.path)}
+                  className="mt-1.5 rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white"
+                >
+                  Return to step{stepNumber ? ` ${stepNumber}` : ""}
+                </button>
+              </div>
+            )}
+
+            {stepNumber !== null && stepTotal !== null && (
               <p className="mt-3 border-t border-neutral-100 pt-2 text-[11px] font-medium text-neutral-400">
-                Step {stepIndex + 1} of {LESSON_STEPS.length} — {step.title}
+                Step {stepNumber} of {stepTotal} — {stepTitle}
               </p>
             )}
           </>
@@ -275,10 +343,10 @@ function LessonRunner({
  * (LessonRunner above) and walks that one step — demonstrating on the real page with VELORA's own
  * data already filled in, explaining why, then waiting for the visitor to press the real button
  * themselves. The moment that step's real backend state shows it's done, NOVA docks back down,
- * then immediately bounces back up for the next step — so all ten onboarding steps (minus
- * `collections`/`preview`, which the backend completes automatically — see lib/novaLessons.ts)
- * play consecutively, across every page they live on, with no manual "what do I click next"
- * hand-off. Once there's no current step left, NOVA stays docked for good, and the same bubble
+ * then immediately bounces back up for the next step the SERVER reports — so every onboarding step
+ * (see lib/novaLessons.ts; steps already satisfied by seeded data are skipped) plays consecutively,
+ * across every page they live on. The app is never locked while it runs: the visitor can navigate
+ * anywhere, and the Guide offers "Return to step" until they come back. Once there's no current step left, NOVA stays docked for good, and the same bubble
  * becomes an ordinary help/FAQ chat — a real AIConversation with the `assistant` agent. */
 export default function NovaGuideWidget() {
   const queryClient = useQueryClient();
@@ -289,6 +357,19 @@ export default function NovaGuideWidget() {
   const guideConversationId = useRef<string | null>(null);
   const faqConversationId = useRef<string | null>(null);
   const [activeStepKey, setActiveStepKey] = useState<string | null>(null);
+  // May the Guide navigate by itself to the next step's page? Yes right after signing in (the auth
+  // pages pass `beginTour`) and after each completed step; no on a plain load/refresh elsewhere.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const autoNavigateRef = useRef(false);
+  useEffect(() => {
+    if ((location.state as { beginTour?: boolean } | null)?.beginTour) {
+      autoNavigateRef.current = true;
+      // Consume it, so a later refresh of this same history entry doesn't count as signing in again.
+      navigate(location.pathname + location.search, { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
   // The real launcher button's last-measured position/size — captured while it's actually
   // mounted (docked), reused as both the spring-out's origin and the retract's target, since the
   // launcher itself unmounts for the whole time a lesson is active and can't be re-measured then.
@@ -305,12 +386,19 @@ export default function NovaGuideWidget() {
     refetchInterval: activeStepKey ? false : 4000,
   });
 
+  // The step that just finished. The progress cache can still say it is current for a moment after
+  // (or already say the NEXT step while this one was still running, because pages invalidate the
+  // query on submit), so a step is never restarted straight after it completed.
+  const justDoneRef = useRef<string | null>(null);
   useEffect(() => {
     if (activeStepKey) return; // a lesson is already running — it polls its own completion
     const currentStep = progress?.current_step ?? null;
-    if (currentStep && getLessonStep(currentStep)) setActiveStepKey(currentStep);
+    if (currentStep !== justDoneRef.current) justDoneRef.current = null;
+    if (currentStep && currentStep !== justDoneRef.current && getLessonStep(currentStep)) setActiveStepKey(currentStep);
+    // Re-evaluates when a lesson ends too (activeStepKey -> null), not only when the server's
+    // current step changes: otherwise a cache that already shows the next step never starts it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress?.current_step]);
+  }, [progress?.current_step, activeStepKey]);
 
   async function sendFaq(text: string) {
     setFaqSending(true);
@@ -336,7 +424,10 @@ export default function NovaGuideWidget() {
         step={activeStep}
         conversationId={guideConversationId}
         dockOrigin={dockRectRef.current}
+        autoNavigate={autoNavigateRef.current}
         onDone={() => {
+          autoNavigateRef.current = true;
+          justDoneRef.current = activeStep.key;
           setActiveStepKey(null);
           void queryClient.invalidateQueries({ queryKey: ["onboarding-progress"] });
         }}

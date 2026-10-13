@@ -3,7 +3,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Product
-from app.errors import NotFoundError
+from app.errors import ConflictError, NotFoundError
 from app.repositories import inventory_repo, product_repo
 
 
@@ -19,6 +19,9 @@ async def get_product_or_404(db: AsyncSession, org_id: uuid.UUID, product_id: uu
 
 
 async def create_product(db: AsyncSession, org_id: uuid.UUID, payload) -> Product:
+    for v in payload.variants:
+        if await product_repo.sku_taken(db, org_id, v.sku):
+            raise ConflictError(f"SKU {v.sku} is already used by another product in this store")
     product = await product_repo.create_product(
         db, org_id,
         title=payload.title, slug=payload.slug, category=payload.category, tags=payload.tags,

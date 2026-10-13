@@ -37,38 +37,27 @@ function renderLayout() {
   );
 }
 
-describe("AppLayout — the app chrome blurs during onboarding, the current task never does", () => {
-  it("blurs the sidebar and header while a real onboarding step is in progress", async () => {
-    // "collections" rather than a real NovaGuideWidget lesson key (e.g. "brand") deliberately —
-    // this test only cares about AppLayout's own chrome-blur logic, and a registered lesson key
-    // would make the now-globally-mounted widget navigate away from "/overview" (which this
-    // test's route tree never defines a target for), unmounting AppLayout itself.
-    vi.mocked(getOnboardingProgress).mockResolvedValue({ steps: [], current_step: "collections", intro_video_seen: true });
+describe("AppLayout — the app chrome is never blurred or disabled, even mid-onboarding", () => {
+  it("keeps the sidebar and header sharp and interactive while a real onboarding step is in progress", async () => {
+    // "storefront" rather than a registered lesson key that would navigate away from "/overview"
+    // in this test's tiny route tree — this test only cares about AppLayout's own chrome.
+    vi.mocked(getOnboardingProgress).mockResolvedValue({
+      steps: [], current_step: "catalog", intro_video_seen: true, total_steps: 10, completed_steps: 3,
+    });
 
     renderLayout();
 
     await waitFor(() => expect(getOnboardingProgress).toHaveBeenCalled());
     const aside = document.querySelector("aside")!;
     const header = document.querySelector("header")!;
-    await waitFor(() => expect(aside.className).toContain("blur-sm"));
-    expect(header.className).toContain("blur-sm");
-    expect(aside.className).toContain("pointer-events-none");
-
-    // The actual page content (<main>'s Outlet) is never blurred or disabled.
-    const main = document.querySelector("main")!;
-    expect(main.className).not.toContain("blur-sm");
+    expect(aside.className).not.toContain("blur");
+    expect(aside.className).not.toContain("pointer-events-none");
+    expect(aside.className).not.toContain("opacity-50");
+    expect(header.className).not.toContain("blur");
+    expect(header.className).not.toContain("pointer-events-none");
     expect(screen.getByText("PAGE CONTENT")).toBeInTheDocument();
-  });
-
-  it("leaves the chrome sharp and interactive once onboarding is complete", async () => {
-    vi.mocked(getOnboardingProgress).mockResolvedValue({ steps: [], current_step: null, intro_video_seen: true });
-
-    renderLayout();
-
-    await waitFor(() => expect(getOnboardingProgress).toHaveBeenCalled());
-    const aside = document.querySelector("aside")!;
-    const header = document.querySelector("header")!;
-    expect(aside.className).not.toContain("blur-sm");
-    expect(header.className).not.toContain("blur-sm");
+    // Every nav destination is a live link, not an inert block.
+    expect(screen.getByText("Products").closest("a")).not.toBeNull();
+    expect(screen.getByText("Approvals").closest("a")).not.toBeNull();
   });
 });

@@ -1,0 +1,13 @@
+{
+  "name": "nova-e2e",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Real-browser journeys for NOVA. No request interception: they drive the actual admin + storefront apps against the actual backend.",
+  "scripts": {
+    "test": "node journeys.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "1.64.0"
+  }
+}

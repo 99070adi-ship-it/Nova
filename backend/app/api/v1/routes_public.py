@@ -43,6 +43,11 @@ async def get_storefront_preview(version_id: uuid.UUID, db: AsyncSession = Depen
     )
 
 
+@router.post("/preview/{version_id}/loaded", status_code=204)
+async def record_preview_loaded(version_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> None:
+    await public_service.record_preview_loaded(db, version_id)
+
+
 @router.get("/stores/{org_slug}/products", response_model=list[PublicProduct])
 async def list_products(org_slug: str, db: AsyncSession = Depends(get_db)) -> list[PublicProduct]:
     org = await public_service.get_org_by_slug_or_404(db, org_slug)

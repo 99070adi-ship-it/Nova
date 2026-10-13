@@ -3,84 +3,159 @@ no parallel state-machine table for step completion — each step's status is co
 rows the rest of NOVA already produces (BrandProfile, ProductDraft, Collection, StorefrontVersion,
 AIAgentRun, AgentActionPlan), so it can never drift from what the store actually contains and
 survives a page refresh for free. The only persisted onboarding-specific state is the one-shot
-intro-video-seen flag on User, which has no natural backing data of its own."""
+intro-video-seen flag on User and the `preview_loaded_at` timestamp on a storefront draft — the
+`preview` step is a genuine event (the preview rendered), which no other row records.
+
+This module is the single canonical definition of the sequence: `STEP_DEFINITIONS` fixes each step's
+key, order, title and completion rule. The admin app reads all of it from `/onboarding/progress`."""
 
 import uuid
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ProductDraftStatus, User
+from app.db.models import GeneratedBy, ProductDraftStatus, User
 from app.repositories import ai_repo, collection_repo, storefront_repo, store_creation_repo, user_repo
 from app.schemas.onboarding import OnboardingProgressOut, OnboardingStepKey, OnboardingStepOut, OnboardingStepStatus
-
-_STEP_TITLES: dict[OnboardingStepKey, str] = {
-    OnboardingStepKey.brand: "Tell NOVA about your business",
-    OnboardingStepKey.products: "Add your products",
-    OnboardingStepKey.catalog: "NOVA builds your catalog",
-    OnboardingStepKey.review: "Review AI-generated content",
-    OnboardingStepKey.collections: "Organize into collections",
-    OnboardingStepKey.storefront: "Build your storefront",
-    OnboardingStepKey.preview: "Preview your storefront",
-    OnboardingStepKey.nl_edit: "Ask NOVA to improve it",
-    OnboardingStepKey.publish: "Publish your store",
-    OnboardingStepKey.run_business: "Learn how NOVA runs your business",
-}
-
-_STEP_ORDER: list[OnboardingStepKey] = list(_STEP_TITLES.keys())
 
 _RESOLVED_DRAFT_STATUSES = (ProductDraftStatus.generated, ProductDraftStatus.accepted, ProductDraftStatus.rejected)
 _FINAL_DRAFT_STATUSES = (ProductDraftStatus.accepted, ProductDraftStatus.rejected)
 
 
-async def _step_completions(db: AsyncSession, org_id: uuid.UUID) -> dict[OnboardingStepKey, bool]:
+@dataclass(frozen=True)
+class _Facts:
+    """Everything any step's completion rule reads, loaded once per progress computation. Each
+    value is a real persisted row (or the absence of one) — never client state."""
+
+    has_brand: bool
+    draft_statuses: list[ProductDraftStatus]
+    has_collection: bool
+    storefront_draft_generated: bool  # a draft exists AND it came from generation, not the auto-created default
+    storefront_draft_previewed: bool  # that draft's preview has been recorded as loaded
+    storefront_draft_created_at: object | None
+    owner_publish_at: object | None  # newest non-baseline live version's published_at
+    has_applied_change_plan: bool
+    has_store_health_run: bool
+    has_action_plan: bool
+
+
+@dataclass(frozen=True)
+class StepDefinition:
+    """One onboarding step. The backend owns the whole definition — key, position in
+    `STEP_DEFINITIONS`, title, the plain-language completion rule, and the predicate that decides it.
+    The admin app only supplies lesson content (what NOVA demonstrates); `contracts/onboarding-steps.json`
+    plus tests on both sides fail if a server step has no lesson or the two lists drift."""
+
+    key: OnboardingStepKey
+    title: str
+    completion_rule: str
+    is_complete: Callable[[_Facts], bool]
+
+
+def _all_drafts_final(f: _Facts) -> bool:
+    return len(f.draft_statuses) > 0 and all(st in _FINAL_DRAFT_STATUSES for st in f.draft_statuses)
+
+
+def _published_after_generation(f: _Facts) -> bool:
+    # The owner published the *generated* storefront: a non-baseline live version published at or
+    # after the generated draft was created. The seeded demo baseline never counts, and neither does
+    # publishing a draft that was later regenerated.
+    return (
+        f.storefront_draft_generated
+        and f.owner_publish_at is not None
+        and f.storefront_draft_created_at is not None
+        and f.owner_publish_at >= f.storefront_draft_created_at
+    )
+
+
+STEP_DEFINITIONS: tuple[StepDefinition, ...] = (
+    StepDefinition(OnboardingStepKey.brand, "Tell NOVA about your business",
+                   "A brand profile exists for the organization.", lambda f: f.has_brand),
+    StepDefinition(OnboardingStepKey.products, "Add your products",
+                   "At least one product draft exists.", lambda f: len(f.draft_statuses) > 0),
+    StepDefinition(OnboardingStepKey.catalog, "NOVA builds your catalog",
+                   "At least one product draft has generated content (or was accepted/rejected).",
+                   lambda f: any(st in _RESOLVED_DRAFT_STATUSES for st in f.draft_statuses)),
+    StepDefinition(OnboardingStepKey.review, "Review AI-generated content",
+                   "Every product draft has been accepted or rejected.", _all_drafts_final),
+    StepDefinition(OnboardingStepKey.collections, "Organize into collections",
+                   "At least one collection exists.", lambda f: f.has_collection),
+    StepDefinition(OnboardingStepKey.storefront, "Build your storefront",
+                   "A storefront draft generated by NOVA exists (the auto-created blank default does not count).",
+                   lambda f: f.storefront_draft_generated),
+    StepDefinition(OnboardingStepKey.preview, "Preview your storefront",
+                   "The generated draft's preview has loaded successfully in the storefront app.",
+                   lambda f: f.storefront_draft_generated and f.storefront_draft_previewed),
+    StepDefinition(OnboardingStepKey.nl_edit, "Ask NOVA to improve it",
+                   "A storefront Change Plan was proposed and then applied to the draft.",
+                   lambda f: f.has_applied_change_plan),
+    StepDefinition(OnboardingStepKey.publish, "Publish your store",
+                   "The owner published the generated draft (the pre-seeded demo baseline does not count).",
+                   _published_after_generation),
+    StepDefinition(OnboardingStepKey.run_business, "Learn how NOVA runs your business",
+                   "A Store Manager health review completed and produced an action plan.",
+                   lambda f: f.has_store_health_run and f.has_action_plan),
+)
+
+
+def contract_snapshot() -> dict:
+    """The server-owned step list in the exact shape committed at `contracts/onboarding-steps.json`.
+    A backend test fails if the committed file differs; a frontend test fails if a step has no lesson."""
+
+    return {
+        "steps": [
+            {"key": d.key.value, "title": d.title, "completion_rule": d.completion_rule} for d in STEP_DEFINITIONS
+        ]
+    }
+
+
+async def _load_facts(db: AsyncSession, org_id: uuid.UUID) -> _Facts:
     brand = await store_creation_repo.get_brand_profile(db, org_id)
     drafts = await store_creation_repo.list_product_drafts_by_org(db, org_id)
     collections = await collection_repo.list_collections(db, org_id)
     storefront_draft = await storefront_repo.get_draft(db, org_id)
-    storefront_live = await storefront_repo.get_live(db, org_id)
-    has_applied_change_plan = await ai_repo.has_applied_change_plan(db, org_id)
-    has_store_health_run = await ai_repo.has_completed_agent_run(db, org_id, agent_key="store_manager", trigger="store_health")
-    has_action_plan = await ai_repo.has_action_plan(db, org_id)
-
-    catalog_done = any(d.status in _RESOLVED_DRAFT_STATUSES for d in drafts)
-    review_done = len(drafts) > 0 and all(d.status in _FINAL_DRAFT_STATUSES for d in drafts)
-
-    return {
-        OnboardingStepKey.brand: brand is not None,
-        OnboardingStepKey.products: len(drafts) > 0,
-        OnboardingStepKey.catalog: catalog_done,
-        OnboardingStepKey.review: review_done,
-        OnboardingStepKey.collections: len(collections) > 0,
-        OnboardingStepKey.storefront: storefront_draft is not None,
-        # No state of its own — previewing is just viewing the draft step 6 already produced.
-        OnboardingStepKey.preview: storefront_draft is not None,
-        OnboardingStepKey.nl_edit: has_applied_change_plan,
-        OnboardingStepKey.publish: storefront_live is not None,
-        OnboardingStepKey.run_business: has_store_health_run and has_action_plan,
-    }
+    generated = storefront_draft is not None and storefront_draft.generated_by != GeneratedBy.owner
+    return _Facts(
+        has_brand=brand is not None,
+        draft_statuses=[d.status for d in drafts],
+        has_collection=len(collections) > 0,
+        storefront_draft_generated=generated,
+        storefront_draft_previewed=generated and storefront_draft.preview_loaded_at is not None,
+        storefront_draft_created_at=storefront_draft.created_at if generated else None,
+        owner_publish_at=await storefront_repo.latest_owner_publish_at(db, org_id),
+        has_applied_change_plan=await ai_repo.has_applied_change_plan(db, org_id),
+        has_store_health_run=await ai_repo.has_completed_agent_run(db, org_id, agent_key="store_manager", trigger="store_health"),
+        has_action_plan=await ai_repo.has_action_plan(db, org_id),
+    )
 
 
 async def get_step_statuses(db: AsyncSession, org_id: uuid.UUID) -> tuple[list[OnboardingStepOut], OnboardingStepKey | None]:
     """Split out from `get_progress` so the `get_onboarding_progress` tool (app/ai/tools.py) can
     call this directly — it has no `User` in scope, only `org_id`, and doesn't need the
-    intro-video flag anyway (that's a UI concern, not something the Guide narrates)."""
+    intro-video flag anyway (that's a UI concern, not something the Guide narrates).
 
-    completions = await _step_completions(db, org_id)
+    A step is `completed` when its own rule is satisfied; the first incomplete step in
+    `STEP_DEFINITIONS` order is `available` (the current step) and later incomplete ones are
+    `locked`. Steps already satisfied by seeded data (e.g. `collections` in a demo workspace) show
+    as completed from the start — the list itself never changes shape."""
+
+    facts = await _load_facts(db, org_id)
 
     steps: list[OnboardingStepOut] = []
     current_step: OnboardingStepKey | None = None
     first_incomplete_seen = False
-    for key in _STEP_ORDER:
-        if completions[key]:
+    for d in STEP_DEFINITIONS:
+        if d.is_complete(facts):
             status = OnboardingStepStatus.completed
         elif not first_incomplete_seen:
             status = OnboardingStepStatus.available
-            current_step = key
+            current_step = d.key
             first_incomplete_seen = True
         else:
             status = OnboardingStepStatus.locked
-        steps.append(OnboardingStepOut(key=key, title=_STEP_TITLES[key], status=status))
+        steps.append(OnboardingStepOut(key=d.key, title=d.title, completion_rule=d.completion_rule, status=status))
 
     return steps, current_step
 
@@ -88,7 +163,8 @@ async def get_step_statuses(db: AsyncSession, org_id: uuid.UUID) -> tuple[list[O
 async def get_progress(db: AsyncSession, org_id: uuid.UUID, user: User) -> OnboardingProgressOut:
     steps, current_step = await get_step_statuses(db, org_id)
     return OnboardingProgressOut(
-        steps=steps, current_step=current_step, intro_video_seen=user.onboarding_intro_seen_at is not None
+        steps=steps, current_step=current_step, intro_video_seen=user.onboarding_intro_seen_at is not None,
+        total_steps=len(steps), completed_steps=sum(1 for st in steps if st.status == OnboardingStepStatus.completed),
     )
 
 

@@ -256,7 +256,7 @@ export default function StoreBuilderPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-semibold">Store Builder</h1>
           <div className="flex items-center gap-4 text-sm">
-            <a href={previewUrl} target="_blank" rel="noreferrer" className="font-medium text-neutral-900 hover:underline">
+            <a data-nova-target="preview.open" href={previewUrl} target="_blank" rel="noreferrer" className="font-medium text-neutral-900 hover:underline">
               Preview draft ↗
             </a>
             <a href={liveUrl} target="_blank" rel="noreferrer" className="text-neutral-500 hover:underline">

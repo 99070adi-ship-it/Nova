@@ -28,7 +28,7 @@ export default function LoginPage() {
       } else {
         await login(email, password);
       }
-      navigate("/overview");
+      navigate("/overview", { state: { beginTour: true } });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed");
     } finally {

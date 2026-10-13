@@ -520,11 +520,39 @@ correction's §24, not separately tracked:
 | 3. Catalog | NOVA generates content | Product Agent run completed → drafts have `status=generated` |
 | 4. Review | Owner accepts/edits/rejects suggestions | All drafts resolved (`accepted`/`rejected`) |
 | 5. Collections | NOVA suggests, owner approves | ≥1 `Collection` exists |
-| 6. Storefront | NOVA generates the store | `StorefrontVersion(status=draft)` exists |
-| 7. Preview | Owner previews the real storefront | (gate only — no extra state; reuses step 6's draft) |
+| 6. Storefront | NOVA generates the store | A `StorefrontVersion(status=draft)` exists that was **generated** (`generated_by != owner`) — the blank draft Store Builder auto-creates never counts |
+| 7. Preview | Owner previews the real storefront | The generated draft's `preview_loaded_at` is set — recorded by `POST /public/preview/{id}/loaded`, which the storefront app calls only after the preview sections have rendered (first load wins; live versions and empty drafts are ignored) |
 | 8. NL edit | Owner asks NOVA to change something | ≥1 Storefront Change Plan `AIAgentRun` exists |
-| 9. Publish | Owner publishes | `StorefrontVersion(status=live)` exists |
+| 9. Publish | Owner publishes | A non-baseline `live` version was published at/after the generated draft was created. The seeded demo baseline (`is_seed_baseline`) never counts |
 | 10. Run the business | "How is my store doing?" → "Fix what you can" | Store Manager `AIAgentRun` **and** ≥1 `AgentActionPlan` exist |
+
+**The backend is the single canonical definition of this sequence.** `onboarding_service.STEP_DEFINITIONS`
+fixes each step's key, order, title, plain-language completion rule and predicate;
+`/onboarding/progress` returns all of it (plus `total_steps`/`completed_steps`) and the admin Guide
+renders "Step N of M" from that response, never from its own list. `contracts/onboarding-steps.json`
+is generated from the definitions (`backend/scripts/export_onboarding_contract.py`); a backend test
+fails if it is stale and an admin test fails if any server step lacks a lesson or a title differs.
+Steps already satisfied by seeded data (e.g. `collections` in a demo workspace) show as completed
+from the start — the list never changes shape.
+
+**No route gate.** Every authenticated page is always reachable. The Guide is a persistent companion:
+it navigates to a step's page right after sign-in and after each completed step, but on a plain
+refresh elsewhere it waits ("Continue the tour"), and mid-step it offers "Return to step". NOVA's
+spotlight dims and blurs only while demonstrating; in the user's turn it is a click-through cue.
+Completion only ever comes from the server-derived state above, and every data endpoint still
+enforces auth and tenant isolation.
+
+**Demo baseline.** Every demo workspace (isolated per visitor, and the dev fixture) is seeded with a
+polished published VELORA storefront: a real `live` `StorefrontVersion` in the same tables, served by
+the same public API and rendered by the same storefront app. It is flagged `is_seed_baseline`. There
+is no draft until onboarding generates one (or Store Builder opens, which then copies what is live).
+The baseline stays live while the visitor builds; onboarding's Publish step publishes the draft
+through the normal validated, idempotent publish flow.
+
+**Known follow-ups (deliberately not in this change):**
+- `preview` trust model: the storefront app reports the load and the server only checks the version is a non-empty draft; a caller who knows the (unguessable) version id could record it. Tighten if previews ever become sensitive.
+- The storefront renderer does not yet apply `StoreTheme` tokens, so the VELORA baseline's colours/fonts are stored but not visible. Belongs with the storefront visual phase.
+- Regenerating the storefront after publishing makes `publish` incomplete again (the rule is tied to the current generated draft).
 
 A new `onboarding_service.get_progress(org_id) -> OnboardingProgress` computes each step's
 `locked \| available \| in_progress \| completed` status from these queries every time it's asked —

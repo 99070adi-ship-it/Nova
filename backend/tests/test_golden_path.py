@@ -84,11 +84,16 @@ async def test_golden_path_signup_through_run_business(client):
     generate_storefront_res = await client.post("/api/v1/store-creation/generate-storefront", headers=headers)
     assert generate_storefront_res.status_code == 200
     p = await progress()
-    # Preview has no state of its own — it and storefront complete together.
-    assert p["current_step"] == "nl_edit"
+    assert p["current_step"] == "preview"
     steps_by_key = {s["key"]: s["status"] for s in p["steps"]}
     assert steps_by_key["storefront"] == OnboardingStepStatus.completed.value
-    assert steps_by_key["preview"] == OnboardingStepStatus.completed.value
+
+    # 7b. Preview — the storefront app reports the draft preview rendered; only then does it complete.
+    draft_id = (await client.get("/api/v1/storefront/draft", headers=headers)).json()["id"]
+    assert (await client.post(f"/api/v1/public/preview/{draft_id}/loaded")).status_code == 204
+    p = await progress()
+    assert p["current_step"] == "nl_edit"
+    assert {s["key"]: s["status"] for s in p["steps"]}["preview"] == OnboardingStepStatus.completed.value
 
     # 8. NL edit — Ask NOVA proposes a Change Plan. Proposing alone does NOT complete this step —
     # only actually applying the plan to the draft does.

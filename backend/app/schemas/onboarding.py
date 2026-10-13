@@ -25,6 +25,7 @@ class OnboardingStepStatus(str, Enum):
 class OnboardingStepOut(BaseModel):
     key: OnboardingStepKey
     title: str
+    completion_rule: str
     status: OnboardingStepStatus
 
 
@@ -32,3 +33,5 @@ class OnboardingProgressOut(BaseModel):
     steps: list[OnboardingStepOut]
     current_step: OnboardingStepKey | None
     intro_video_seen: bool
+    total_steps: int
+    completed_steps: int

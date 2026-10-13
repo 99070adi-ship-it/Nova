@@ -2,7 +2,8 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Organization, Product, StorefrontVersion
+from app.db.base import utcnow
+from app.db.models import Organization, Product, StorefrontVersion, StorefrontVersionStatus
 from app.errors import NotFoundError
 from app.repositories import collection_repo, product_repo, storefront_repo
 
@@ -56,3 +57,21 @@ async def get_collection_or_404(db: AsyncSession, org_id: uuid.UUID, collection_
     if collection is None:
         raise NotFoundError("Collection not found")
     return collection, await collection_repo.get_product_ids(db, collection.id)
+
+
+async def record_preview_loaded(db: AsyncSession, version_id: uuid.UUID) -> bool:
+    """The storefront app calls this only after a draft preview has fetched AND rendered. Records
+    the first such load on a draft with real content; anything else is a no-op, never an error the
+    previewing page has to handle. Returns whether this call recorded the event.
+
+    Same access model as the preview GET itself: the unguessable version id is the capability.
+    Live versions are not recorded — onboarding's `preview` step is about the draft."""
+
+    version = await storefront_repo.get_by_id(db, version_id)
+    if version is None:
+        raise NotFoundError("Storefront version not found")
+    if version.status != StorefrontVersionStatus.draft or not any(p.sections for p in version.pages):
+        return False
+    recorded = await storefront_repo.mark_preview_loaded(db, version.id, at=utcnow())
+    await db.commit()
+    return recorded

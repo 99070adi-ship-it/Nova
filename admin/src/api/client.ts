@@ -641,6 +641,8 @@ export type OnboardingStepKey =
 export interface OnboardingStep {
   key: OnboardingStepKey;
   title: string;
+  /** Plain-language rule the server uses to decide this step is done. */
+  completion_rule: string;
   status: "locked" | "available" | "completed";
 }
 
@@ -648,6 +650,8 @@ export interface OnboardingProgress {
   steps: OnboardingStep[];
   current_step: OnboardingStepKey | null;
   intro_video_seen: boolean;
+  total_steps: number;
+  completed_steps: number;
 }
 
 export async function getOnboardingProgress() {

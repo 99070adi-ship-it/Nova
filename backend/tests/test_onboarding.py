@@ -33,6 +33,15 @@ async def _advance_to_nl_edit_step(client, headers) -> None:
     await client.post(f"/api/v1/store-creation/product-drafts/{draft_id}/accept", headers=headers)
     await client.post("/api/v1/collections", json={"title": "New Arrivals", "slug": "new-arrivals"}, headers=headers)
     await client.post("/api/v1/store-creation/generate-storefront", headers=headers)
+    await _load_draft_preview(client, headers)
+
+
+async def _load_draft_preview(client, headers) -> str:
+    """What the storefront app does once the draft preview has rendered: tell the server."""
+    draft_id = (await client.get("/api/v1/storefront/draft", headers=headers)).json()["id"]
+    res = await client.post(f"/api/v1/public/preview/{draft_id}/loaded")
+    assert res.status_code == 204
+    return draft_id
 
 
 async def test_progress_starts_all_locked_except_brand(client, seeded_owner):
@@ -108,10 +117,16 @@ async def test_progress_advances_step_by_step_through_the_real_flow(client, seed
     assert statuses["collections"] == "completed"
     assert current == "storefront"
 
-    # Step 6/7 — storefront draft generated (preview rides along with it — no state of its own).
+    # Step 6 — storefront draft generated. Preview is its own step: generating alone must not complete it.
     await client.post("/api/v1/store-creation/generate-storefront", headers=headers)
     statuses, current = await progress()
     assert statuses["storefront"] == "completed"
+    assert statuses["preview"] == "available"
+    assert current == "preview"
+
+    # Step 7 — preview: only the recorded "preview loaded" event completes it.
+    await _load_draft_preview(client, headers)
+    statuses, current = await progress()
     assert statuses["preview"] == "completed"
     assert current == "nl_edit"
 

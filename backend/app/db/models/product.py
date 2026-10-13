@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from sqlalchemy import ForeignKey, Numeric, String, Text
+from sqlalchemy import ForeignKey, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import ENUM as PGEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -37,9 +37,12 @@ class Product(Base, UUIDPKMixin, TimestampMixin):
 
 class ProductVariant(Base, UUIDPKMixin, TimestampMixin):
     __tablename__ = "product_variants"
+    # A SKU identifies a variant within ONE store; two tenants may use the same SKU.
+    __table_args__ = (UniqueConstraint("org_id", "sku", name="uq_product_variants_org_id_sku"),)
 
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
     product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("products.id"), nullable=False, index=True)
-    sku: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    sku: Mapped[str] = mapped_column(String(100), nullable=False)
     price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     cost: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     attributes: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

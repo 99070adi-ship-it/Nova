@@ -81,6 +81,16 @@ export async function getStorefrontPreview(versionId: string) {
   return body as Storefront;
 }
 
+/** Tells the server this draft preview genuinely loaded AND rendered — the real event behind
+ * onboarding's `preview` step. Only ever called after the sections are on screen (HomePage), never
+ * on a failed or empty load; the server independently ignores live versions and empty drafts, and
+ * records only the first load. Fire-and-forget: it must never break the preview itself. */
+export function recordPreviewLoaded(versionId: string): Promise<void> {
+  return fetch(`${API_BASE_URL}/public/preview/${versionId}/loaded`, { method: "POST" })
+    .then(() => undefined)
+    .catch(() => undefined);
+}
+
 export async function listProducts() {
   return apiFetch<Product[]>("/products");
 }

@@ -21,7 +21,7 @@ export default function SignupPage() {
     setSubmitting(true);
     try {
       await signup({ org_name: orgName, full_name: fullName, email, password });
-      navigate("/overview");
+      navigate("/overview", { state: { beginTour: true } });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create your account");
     } finally {

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { getStorefront, getStorefrontPreview, recordEvent } from "../api/client";
+import { getStorefront, getStorefrontPreview, recordEvent, recordPreviewLoaded } from "../api/client";
 import SectionRenderer from "../components/SectionRenderer";
 import StoreHeader from "../components/StoreHeader";
 
@@ -18,6 +18,16 @@ export default function HomePage() {
     if (!previewVersionId) recordEvent("page_view"); // previews are never real customer traffic
   }, [previewVersionId]);
 
+  const homePage = storefront?.pages.find((p) => p.slug === "home") ?? storefront?.pages[0];
+  const renderedSections = homePage?.sections.length ?? 0;
+  const reportedPreviewRef = useRef<string | null>(null);
+  useEffect(() => {
+    // After commit, i.e. the sections are actually in the DOM — not merely fetched.
+    if (!previewVersionId || renderedSections === 0 || reportedPreviewRef.current === previewVersionId) return;
+    reportedPreviewRef.current = previewVersionId;
+    void recordPreviewLoaded(previewVersionId);
+  }, [previewVersionId, renderedSections]);
+
   if (isLoading) return <p className="p-6 text-sm text-neutral-400">Loading…</p>;
   if (error || !storefront) {
     return (
@@ -26,8 +36,6 @@ export default function HomePage() {
       </p>
     );
   }
-
-  const homePage = storefront.pages.find((p) => p.slug === "home") ?? storefront.pages[0];
 
   return (
     <div>

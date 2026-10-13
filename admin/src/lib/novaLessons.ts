@@ -1,15 +1,16 @@
 import type { UIAction } from "./novaUiActions";
 
 /**
- * The full ten-step onboarding journey (backend/app/services/onboarding_service.py's
- * `_STEP_ORDER`), expressed as one consecutive, cross-page tour. Two of the ten keys
- * (`collections`, `preview`) never actually show up as `current_step` for the public demo
- * identity — `collections` is already satisfied by VELORA's seeded catalog, and `preview` is
- * defined to complete the instant `storefront` does — so they're intentionally absent here; the
- * widget driving this list only ever needs a lesson for a key it can actually become the current
- * step for. Every value below is real VELORA brand/catalog text, matching
- * backend/app/services/demo_service.py's `_seed_velora_catalog()`/`seed_velora_demo()` exactly,
- * so the demonstration always reads as NOVA working on this store, never a generic placeholder.
+ * Lesson content for every step of the onboarding journey. The SEQUENCE is not defined here: the
+ * backend owns the step keys, order, titles and completion rules
+ * (backend/app/services/onboarding_service.py's `STEP_DEFINITIONS`, mirrored in
+ * `contracts/onboarding-steps.json`), and the Guide reads the count and current step from
+ * `/onboarding/progress`. This file only supplies what NOVA demonstrates for each server step —
+ * `lib/novaLessons.test.ts` fails if a server step has no lesson or a title drifts. Steps already
+ * satisfied by seeded data (e.g. `collections` in a demo workspace) simply show as done in the
+ * progress and their lesson never runs. Every value below is real VELORA brand/catalog text,
+ * matching backend/app/services/demo_service.py, so the demonstration always reads as NOVA
+ * working on this store, never a generic placeholder.
  */
 export interface LessonStep {
   key: string;
@@ -114,6 +115,21 @@ export const LESSON_STEPS: LessonStep[] = [
     afterActionHint: "NOVA will then build your storefront from your brand and this product.",
   },
   {
+    key: "collections",
+    title: "Organize into collections",
+    path: "/create-store",
+    demoActions: [
+      { type: "spotlight", target: "collection_form.title" },
+      { type: "fill_field", target: "collection_form.title", value: "Signature Totes" },
+      { type: "spotlight", target: "collection_form.create" },
+    ],
+    demoPrompt: "I'm about to show the user how to group products into a collection. Narrate it briefly.",
+    explainPrompt: "Explain briefly why collections matter: they let customers browse by theme, and NOVA uses them to organize the storefront.",
+    completePrompt: "The user just created their first collection. Congratulate them briefly and tell them what's next.",
+    nextActionLabel: "Create collection",
+    afterActionHint: "Next, NOVA will build your storefront from your brand and products.",
+  },
+  {
     key: "storefront",
     title: "Build your storefront",
     path: "/create-store",
@@ -123,6 +139,17 @@ export const LESSON_STEPS: LessonStep[] = [
     completePrompt: "NOVA just generated the user's storefront. Congratulate them briefly and tell them what's next.",
     nextActionLabel: "Generate storefront",
     afterActionHint: "Next, you can ask NOVA to improve it in plain language.",
+  },
+  {
+    key: "preview",
+    title: "Preview your storefront",
+    path: "/store-builder",
+    demoActions: [{ type: "spotlight", target: "preview.open" }],
+    demoPrompt: "I'm about to show the user how to preview their storefront draft as a customer would see it. Narrate it briefly.",
+    explainPrompt: "Explain briefly that the preview opens the real storefront for the draft in a new tab, that it is not live to customers, and that this step completes once the preview has actually loaded.",
+    completePrompt: "The user's storefront preview just loaded. Congratulate them briefly and tell them what's next.",
+    nextActionLabel: "Preview draft",
+    afterActionHint: "Next, you can ask NOVA to improve what you see.",
   },
   {
     key: "nl_edit",

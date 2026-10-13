@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -53,6 +53,39 @@ async def get_live(db: AsyncSession, org_id: uuid.UUID) -> StorefrontVersion | N
         .order_by(StorefrontVersion.published_at.desc())
     )
     return result.unique().scalars().first()
+
+
+async def latest_owner_publish_at(db: AsyncSession, org_id: uuid.UUID):
+    """When the owner last published — the newest `live` version that is NOT the seeded demo
+    baseline. None if they never have. Light query (no section tree): onboarding calls this on every
+    progress poll."""
+
+    result = await db.execute(
+        select(func.max(StorefrontVersion.published_at)).where(
+            StorefrontVersion.org_id == org_id,
+            StorefrontVersion.status == StorefrontVersionStatus.live,
+            StorefrontVersion.is_seed_baseline.is_(False),
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def mark_preview_loaded(db: AsyncSession, version_id: uuid.UUID, *, at) -> bool:
+    """Records the first successful preview load of a DRAFT version. First write wins: the UPDATE
+    only matches while `preview_loaded_at` is still null, so repeats (refresh, a second tab, a
+    retry) are no-ops. Returns whether this call was the one that recorded it."""
+
+    result = await db.execute(
+        update(StorefrontVersion)
+        .where(
+            StorefrontVersion.id == version_id,
+            StorefrontVersion.status == StorefrontVersionStatus.draft,
+            StorefrontVersion.preview_loaded_at.is_(None),
+        )
+        .values(preview_loaded_at=at)
+    )
+    await db.flush()
+    return result.rowcount == 1
 
 
 async def get_org_by_slug(db: AsyncSession, slug: str) -> Organization | None:
@@ -127,9 +160,12 @@ async def update_theme(db: AsyncSession, storefront_version_id: uuid.UUID, token
 
 async def create_version(
     db: AsyncSession, org_id: uuid.UUID, *, status: StorefrontVersionStatus, generated_by: GeneratedBy,
-    pages: list[dict], theme_tokens: dict, published_at=None,
+    pages: list[dict], theme_tokens: dict, published_at=None, is_seed_baseline: bool = False,
 ) -> StorefrontVersion:
-    version = StorefrontVersion(org_id=org_id, status=status, generated_by=generated_by, published_at=published_at)
+    version = StorefrontVersion(
+        org_id=org_id, status=status, generated_by=generated_by, published_at=published_at,
+        is_seed_baseline=is_seed_baseline,
+    )
     db.add(version)
     await db.flush()
 

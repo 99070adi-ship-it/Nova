@@ -27,6 +27,10 @@ export interface NovaLessonConfig {
    * succeeded and produced it), the spotlight switches to it and a fresh user_turn begins for it,
    * still gated on the same real `verify`. */
   secondUserTurnTarget?: string;
+  /** True while the visitor is away from the page this lesson lives on. The stuck/error backstop
+   * is held off for as long as it is — wandering around the app is not a failed attempt. Server
+   * verification still runs, so doing the real action elsewhere still completes the step. */
+  isAway?: () => boolean;
   pollMs?: number;
   /** Milliseconds paced between each demo action — tunable so tests don't need real wall-clock
    * seconds; production code relies on the default. */
@@ -46,6 +50,7 @@ export function useNovaLesson(config: NovaLessonConfig) {
   const [activeTarget, setActiveTarget] = useState<string | null>(null);
   const startedRef = useRef(false);
   const prevTargetRef = useRef<string | null>(null);
+  const startedAtRef = useRef(Date.now());
 
   async function start() {
     if (startedRef.current) return;
@@ -87,7 +92,7 @@ export function useNovaLesson(config: NovaLessonConfig) {
   useEffect(() => {
     if (phase !== "user_turn" && phase !== "verifying") return;
     let cancelled = false;
-    const startedAt = Date.now();
+    startedAtRef.current = Date.now();
     const stuckMs = config.stuckTimeoutMs ?? DEFAULT_STUCK_TIMEOUT_MS;
 
     const tick = async () => {
@@ -124,7 +129,8 @@ export function useNovaLesson(config: NovaLessonConfig) {
         setPhase("complete");
         return;
       }
-      if (Date.now() - startedAt > stuckMs) {
+      if (config.isAway?.()) startedAtRef.current = Date.now();
+      if (Date.now() - startedAtRef.current > stuckMs) {
         cancelled = true;
         setPhase("error");
       }

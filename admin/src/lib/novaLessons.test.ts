@@ -8,9 +8,11 @@ import { LESSON_STEPS, primaryActionTarget } from "./novaLessons";
 const TWO_ACTION_STEPS = new Set(["nl_edit", "run_business"]);
 
 describe("LESSON_STEPS — every lesson defines a clear, deterministic next action (requirement 1/6)", () => {
-  it("covers exactly the 8 real onboarding steps the Guide ever becomes active for", () => {
+  it("covers all ten onboarding steps, in order", () => {
     const keys = LESSON_STEPS.map((s) => s.key);
-    expect(keys).toEqual(["brand", "products", "catalog", "review", "storefront", "nl_edit", "publish", "run_business"]);
+    expect(keys).toEqual([
+      "brand", "products", "catalog", "review", "collections", "storefront", "preview", "nl_edit", "publish", "run_business",
+    ]);
   });
 
   it.each(LESSON_STEPS)("$key has a meaningful title, a real target, and a non-generic next-action label", (step) => {
@@ -63,5 +65,25 @@ describe("LESSON_STEPS — every lesson defines a clear, deterministic next acti
     for (const target of allTargets) {
       expect(target).toMatch(/^[a-z_]+\.[a-z_]+$/);
     }
+  });
+});
+
+// ---- Server contract (contracts/onboarding-steps.json, owned by backend STEP_DEFINITIONS) ----
+import contract from "../../../contracts/onboarding-steps.json";
+
+describe("LESSON_STEPS vs the backend's canonical onboarding steps", () => {
+  it("has a lesson for every server-defined step, in the server's order", () => {
+    const serverKeys = contract.steps.map((s) => s.key);
+    expect(LESSON_STEPS.map((s) => s.key)).toEqual(serverKeys);
+  });
+
+  it("uses the server's titles verbatim, so the UI can never describe a step differently from the backend", () => {
+    for (const server of contract.steps) {
+      expect(LESSON_STEPS.find((l) => l.key === server.key)?.title).toBe(server.title);
+    }
+  });
+
+  it("every server step has a meaningful, human-readable completion rule", () => {
+    for (const s of contract.steps) expect(s.completion_rule.length).toBeGreaterThan(20);
   });
 });

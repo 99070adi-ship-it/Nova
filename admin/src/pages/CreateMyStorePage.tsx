@@ -427,6 +427,7 @@ function CollectionsPanel() {
         className="mt-3 flex flex-wrap items-end gap-2"
       >
         <input
+          data-nova-target="collection_form.title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Collection name"
@@ -445,6 +446,7 @@ function CollectionsPanel() {
           ))}
         </select>
         <button
+          data-nova-target="collection_form.create"
           type="submit"
           disabled={createMutation.isPending}
           className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white"

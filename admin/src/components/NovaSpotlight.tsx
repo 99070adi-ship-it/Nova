@@ -1,14 +1,15 @@
-// Everything outside the one real element NOVA is about to act on visibly loses focus — blurred
-// and dimmed, not just dimmed — while NOVA demonstrates, then returns to normal the instant
-// control hands back to the user (NovaSpotlight only renders at all while `rect` is set, which is
-// only true during the demo's own spotlight actions — see hooks/useNovaLesson.ts). Implemented as
+// Two modes, both fully click-through (pointer-events-none) so the app is never locked:
+//  - "focus": everything outside the one real element NOVA is acting on is blurred and dimmed.
+//    Used ONLY while NOVA is demonstrating.
+//  - "cue": once control is handed to the user, the blur/dim is gone — just a quiet ring and pulse
+//    on the control to press, so navigation and the rest of the page are fully usable. Implemented as
 // four bands tiling the region outside the focused box (top/bottom/left/right) rather than a
 // clip-path mask — simpler, and each band eases independently with the same spring motion as the
 // focus ring and pointer, so the whole thing visibly travels together, not a static window.
 const SPRING_EASING = "cubic-bezier(0.34, 1.56, 0.64, 1)";
 const MOVE = `top 550ms ${SPRING_EASING}, left 550ms ${SPRING_EASING}, width 550ms ${SPRING_EASING}, height 550ms ${SPRING_EASING}, right 550ms ${SPRING_EASING}, bottom 550ms ${SPRING_EASING}`;
 
-export default function NovaSpotlight({ rect }: { rect: DOMRect | null }) {
+export default function NovaSpotlight({ rect, mode = "focus" }: { rect: DOMRect | null; mode?: "focus" | "cue" }) {
   if (!rect) return null;
 
   const pad = 8;
@@ -29,11 +30,15 @@ export default function NovaSpotlight({ rect }: { rect: DOMRect | null }) {
   };
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-40">
-      <div style={{ ...band, top: 0, left: 0, width: "100%", height: box.top }} />
-      <div style={{ ...band, top: box.top + box.height, left: 0, width: "100%", bottom: 0 }} />
-      <div style={{ ...band, top: box.top, left: 0, width: box.left, height: box.height }} />
-      <div style={{ ...band, top: box.top, left: box.left + box.width, right: 0, height: box.height }} />
+    <div className="pointer-events-none fixed inset-0 z-40" data-nova-spotlight={mode}>
+      {mode === "focus" && (
+        <>
+          <div style={{ ...band, top: 0, left: 0, width: "100%", height: box.top }} />
+          <div style={{ ...band, top: box.top + box.height, left: 0, width: "100%", bottom: 0 }} />
+          <div style={{ ...band, top: box.top, left: 0, width: box.left, height: box.height }} />
+          <div style={{ ...band, top: box.top, left: box.left + box.width, right: 0, height: box.height }} />
+        </>
+      )}
 
       <div
         className="absolute rounded-lg ring-2 ring-amber-400"

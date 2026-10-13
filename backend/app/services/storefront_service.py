@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import utcnow
 from app.db.models import GeneratedBy, StorePage, StoreSection, StorefrontVersion, StorefrontVersionStatus
-from app.errors import NotFoundError
+from app.errors import NotFoundError, ValidationDomainError
 from app.repositories import storefront_repo, store_creation_repo
 
 DEFAULT_THEME_TOKENS = {
@@ -48,12 +48,21 @@ async def get_or_create_draft(db: AsyncSession, org_id: uuid.UUID) -> Storefront
     if draft is not None:
         return draft
 
-    brand = await store_creation_repo.get_brand_profile(db, org_id)
-    brand_name = brand.name if brand is not None else "My Store"
+    # A store that already has a live version (e.g. a demo workspace's seeded baseline) starts its
+    # draft as an editable copy of what's live, never a blank default that would look like a
+    # regression the moment the owner opens Store Builder. The copy keeps the live version's
+    # `generated_by`, so it is never mistaken for a NOVA-generated storefront by onboarding.
+    live = await storefront_repo.get_live(db, org_id)
+    if live is not None:
+        pages, theme_tokens, generated_by = snapshot_pages(live), dict(live.theme.tokens), live.generated_by
+    else:
+        brand = await store_creation_repo.get_brand_profile(db, org_id)
+        pages = _default_homepage(brand.name if brand is not None else "My Store")
+        theme_tokens, generated_by = DEFAULT_THEME_TOKENS, GeneratedBy.owner
     try:
         draft = await storefront_repo.create_version(
-            db, org_id, status=StorefrontVersionStatus.draft, generated_by=GeneratedBy.owner,
-            pages=_default_homepage(brand_name), theme_tokens=DEFAULT_THEME_TOKENS,
+            db, org_id, status=StorefrontVersionStatus.draft, generated_by=generated_by,
+            pages=pages, theme_tokens=theme_tokens,
         )
         await db.commit()
     except IntegrityError:
@@ -88,12 +97,34 @@ def snapshot_pages(draft: StorefrontVersion) -> list[dict]:
     ]
 
 
+def validate_publishable(draft: StorefrontVersion) -> None:
+    """A draft can only go live if its home page exists and has something to render — publishing an
+    empty page would replace a working storefront with a blank one."""
+
+    home = next((p for p in draft.pages if p.slug == "home"), None)
+    if home is None or not home.sections:
+        raise ValidationDomainError("The storefront needs a home page with at least one section before it can be published")
+
+
+def _same_content(draft: StorefrontVersion, live: StorefrontVersion) -> bool:
+    return snapshot_pages(draft) == snapshot_pages(live) and draft.theme.tokens == live.theme.tokens
+
+
 async def publish(db: AsyncSession, org_id: uuid.UUID) -> StorefrontVersion:
     """Copies the current draft's section tree into a new immutable `live` version — the draft
     itself is untouched, so it keeps evolving independently of what's published
-    (ARCHITECTURE.md "Storefront live/draft/publish model")."""
+    (ARCHITECTURE.md "Storefront live/draft/publish model").
+
+    Validated, and idempotent: a retry or double-click with no edits since the owner's last publish
+    returns that same live version instead of stacking an identical one. The seeded demo baseline is
+    deliberately excluded from that check, so the owner's first publish always produces their own
+    version even if the draft is still identical to the baseline."""
 
     draft = await get_or_create_draft(db, org_id)
+    validate_publishable(draft)
+    latest = await storefront_repo.get_live(db, org_id)
+    if latest is not None and not latest.is_seed_baseline and _same_content(draft, latest):
+        return latest
     live = await storefront_repo.create_version(
         db, org_id, status=StorefrontVersionStatus.live, generated_by=draft.generated_by,
         pages=snapshot_pages(draft), theme_tokens=draft.theme.tokens, published_at=utcnow(),

@@ -139,8 +139,12 @@ async def test_demo_login_needs_no_signup_or_credentials_and_lands_in_the_real_t
     products_res = await client.get("/api/v1/products", headers=headers)
     assert len(products_res.json()) == 26  # the rich catalog, no review draft accepted yet
 
+    # A polished VELORA baseline is already live (seeded, flagged is_seed_baseline) — but onboarding
+    # does not count it as the visitor publishing; the tutorial still generates and publishes their own.
     live_res = await client.get("/api/v1/storefront/live", headers=headers)
-    assert live_res.status_code == 404  # not generated/published yet — the tutorial does this
+    assert live_res.status_code == 200 and live_res.json()["status"] == "live"
+    steps = {s["key"]: s["status"] for s in progress_res.json()["steps"]}
+    assert steps["publish"] == "locked" and steps["storefront"] == "locked"
 
     # The same generated identity also works through the ordinary login form.
     login_res = await client.post("/api/v1/auth/login", json={"email": email, "password": "changeme123"})

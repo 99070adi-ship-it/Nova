@@ -23,6 +23,11 @@ async def get_product(db: AsyncSession, org_id: uuid.UUID, product_id: uuid.UUID
     return result.scalar_one_or_none()
 
 
+async def sku_taken(db: AsyncSession, org_id: uuid.UUID, sku: str) -> bool:
+    result = await db.execute(select(ProductVariant.id).where(ProductVariant.org_id == org_id, ProductVariant.sku == sku).limit(1))
+    return result.first() is not None
+
+
 async def create_product(
     db: AsyncSession, org_id: uuid.UUID, *, title: str, slug: str, category: str | None, tags: list | None,
     description: str | None, seo_title: str | None, seo_description: str | None, variants: list[dict],
@@ -34,7 +39,7 @@ async def create_product(
     db.add(product)
     await db.flush()
     for v in variants:
-        db.add(ProductVariant(product_id=product.id, **v))
+        db.add(ProductVariant(org_id=org_id, product_id=product.id, **v))
     await db.flush()
     return await get_product(db, org_id, product.id)  # reload with variants relationship populated
 
