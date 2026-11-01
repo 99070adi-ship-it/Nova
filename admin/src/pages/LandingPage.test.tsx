@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import LandingPage from "./LandingPage";
 import { useAuth } from "../lib/auth";
 
@@ -58,5 +58,34 @@ describe("LandingPage — intro video with Skip, nothing else to choose", () => 
     renderLanding();
 
     expect(screen.getByText("OVERVIEW PAGE")).toBeInTheDocument();
+  });
+
+  describe("the film", () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("plays muted and inline, says it is an illustrative vision film, and does not trap the visitor on a failed video", () => {
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: false } as never);
+      renderLanding();
+
+      const video = document.querySelector("video")!;
+      expect(video).toHaveAttribute("poster");
+      expect(video.muted).toBe(true);
+      expect(video).toHaveAttribute("playsinline");
+      expect(screen.getByText(/vision film/i)).toBeInTheDocument();
+
+      fireEvent.error(video);
+      expect(screen.getByText("LOGIN PAGE")).toBeInTheDocument();
+    });
+
+    it("under reduced motion shows the poster instead of a video, with an Explore NOVA button", () => {
+      vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("reduce"), addEventListener() {}, removeEventListener() {} }));
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: false } as never);
+      renderLanding();
+
+      expect(document.querySelector("video")).toBeNull();
+      expect(screen.getByAltText(/built for what's next/i)).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Explore NOVA"));
+      expect(screen.getByText("LOGIN PAGE")).toBeInTheDocument();
+    });
   });
 });

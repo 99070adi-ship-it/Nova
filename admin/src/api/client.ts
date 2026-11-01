@@ -5,13 +5,23 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8100/api/v1";
 
+/** "Request validation failed" tells the person nothing; name the first field that was rejected and why. */
+function friendlyValidationMessage(details: unknown): string | null {
+  const first = (details as { errors?: { loc?: unknown[]; msg?: string }[] } | null)?.errors?.[0];
+  if (!first?.msg) return null;
+  const field = String(first.loc?.[first.loc.length - 1] ?? "").replace(/_/g, " ");
+  const reason = first.msg.replace(/^(Value error, |value is not a valid email address: )/i, "").replace(/\.$/, "");
+  const known = first.msg.toLowerCase().includes("valid email") ? "That email address isn't valid" : null;
+  return known ?? (field ? `Check the ${field} field: ${reason}` : reason);
+}
+
 export class ApiError extends Error {
   code: string;
   status: number;
   details: unknown;
 
   constructor(status: number, code: string, message: string, details: unknown) {
-    super(message);
+    super(code === "validation_error" ? friendlyValidationMessage(details) ?? message : message);
     this.status = status;
     this.code = code;
     this.details = details;
@@ -45,6 +55,44 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(res.status, err.code, err.message, err.details);
   }
   return body as T;
+}
+
+/** NOVA's voice: the backend turns the exact narration text into speech (self-hosted Kokoro TTS; no
+ * API key, nothing paid per request) and returns a WAV (the response's own Content-Type says so). Throws ApiError on any non-2xx, which the caller treats as "carry
+ * on in text". `signal` aborts the request when the narration is replaced or cancelled. */
+export async function fetchSpeech(text: string, signal?: AbortSignal): Promise<Blob> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+  const res = await fetch(`${API_BASE_URL}/ai/speech`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ text }),
+    credentials: "include",
+    signal,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const err = body?.error ?? { code: "unknown", message: "Speech request failed" };
+    throw new ApiError(res.status, err.code, err.message, err.details);
+  }
+  return res.blob();
+}
+
+export type SpeechEngineState = "not_loaded" | "loading" | "ready" | "failed";
+export interface SpeechStatus {
+  engine: string;
+  state: SpeechEngineState;
+  ready: boolean;
+}
+
+/** Readiness of the voice engine, so the UI can tell "voice unavailable" from a normal answer. */
+export async function getSpeechStatus(): Promise<SpeechStatus> {
+  return apiFetch<SpeechStatus>("/ai/speech/status");
+}
+
+/** Starts loading the voice model in the background (idempotent); returns the current status at once. */
+export async function warmUpSpeech(): Promise<SpeechStatus> {
+  return apiFetch<SpeechStatus>("/ai/speech/warmup", { method: "POST" });
 }
 
 // ---- Auth ----
@@ -380,6 +428,8 @@ export interface StorefrontVersion {
   published_at: string | null;
   theme: Record<string, string>;
   pages: StorePage[];
+  /** A fingerprint of the draft's content; click-to-edit proposals are bound to it (stale ones are refused). */
+  revision: string;
 }
 
 export async function getStorefrontDraft() {
@@ -432,6 +482,86 @@ export async function applyChangePlan(agentRunId: string) {
   return apiFetch<StorefrontVersion>(`/storefront/change-plan/${agentRunId}/apply`, { method: "POST" });
 }
 
+// ---- Store Builder: click-to-edit ----
+
+export interface EditableProperty {
+  path: string;
+  label: string;
+  kind: "text" | "textarea" | "link" | "enum" | "int" | "color" | "collection_id" | "image_url";
+  max_length: number | null;
+  options: string[] | null;
+  minimum: number | null;
+  maximum: number | null;
+  optional: boolean;
+}
+export interface EditableElement {
+  key: string;
+  section_type: string | null;
+  label: string;
+  properties: EditableProperty[];
+  suggestions: string[];
+}
+export interface EditableRegistry {
+  elements: EditableElement[];
+  section_types: Array<{ type: string; label: string }>;
+  fonts: Record<string, string>;
+}
+export interface ElementChange {
+  path: string;
+  label: string;
+  current: unknown;
+  proposed: unknown;
+}
+export interface ElementEditProposal {
+  proposal_id: string;
+  draft_id: string;
+  revision: string;
+  section_id: string | null;
+  element: string;
+  element_label: string;
+  summary: string;
+  reasoning: string;
+  changes: ElementChange[];
+  warnings: string[];
+  state: "proposed" | "applied" | "discarded";
+}
+
+export async function getEditableElements() {
+  return apiFetch<EditableRegistry>("/storefront/editable-elements");
+}
+
+export async function proposeElementEdit(input: { draft_id: string; revision: string; section_id: string | null; element: string; instruction: string }) {
+  return apiFetch<ElementEditProposal>("/storefront/element-edit/propose", { method: "POST", body: JSON.stringify(input) });
+}
+
+export async function applyElementEdit(proposalId: string, revision: string) {
+  return apiFetch<StorefrontVersion>(`/storefront/element-edit/${proposalId}/apply`, { method: "POST", body: JSON.stringify({ revision }) });
+}
+
+export async function discardElementEdit(proposalId: string) {
+  return apiFetch<ElementEditProposal>(`/storefront/element-edit/${proposalId}/discard`, { method: "POST" });
+}
+
+// ---- AI provider status ----
+
+export interface AiStatus {
+  provider: "fake" | "nvidia" | "openai";
+  model: string | null;
+  real_ai: boolean;
+  /** "language_model" for a real provider; "rule_based_demo" for the deterministic double (it follows rules, it is not an LLM). */
+  mode: "language_model" | "rule_based_demo";
+  credentials_configured: boolean;
+  ready: boolean | null;
+  reason?: string;
+  config?: { restart_required: boolean; changed_on_disk: string[]; overridden_by_environment: string[]; env_file_found: boolean };
+  /** The speech (text-to-speech) provider: independent of the text AI above. */
+  voice?: { provider: string; role: string };
+}
+
+export async function getAiStatus() {
+  return apiFetch<AiStatus>("/ai/status");
+}
+
 export async function generateStorefront() {
   return apiFetch<{ id: string; status: string }>("/store-creation/generate-storefront", { method: "POST" });
 }
@@ -456,6 +586,8 @@ export interface PostMessageResult {
   assistant_text: string;
   hit_loop_cap: boolean;
   tool_call_log: { name: string; arguments: Record<string, unknown>; is_mutating: boolean }[];
+  /** How the assistant routed the message: small_talk, product_help, business_query, action_request, troubleshooting or ambiguous. */
+  intent?: string | null;
 }
 
 export async function startConversation(input: { agent_key: string; context: Record<string, unknown> }) {
@@ -466,10 +598,12 @@ export async function listMessages(conversationId: string) {
   return apiFetch<AIMessage[]>(`/ai/conversations/${conversationId}/messages`);
 }
 
-export async function postMessage(conversationId: string, text: string) {
+/** `screen` is the admin screen the person is on (e.g. "products"); the server checks it against an
+ * allowlist, so the assistant can be relevant without trusting free-form client context. */
+export async function postMessage(conversationId: string, text: string, screen?: string, focus?: Record<string, string>) {
   return apiFetch<PostMessageResult>(`/ai/conversations/${conversationId}/messages`, {
     method: "POST",
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, ...(screen ? { screen } : {}), ...(focus ? { focus } : {}) }),
   });
 }
 
@@ -660,6 +794,65 @@ export async function getOnboardingProgress() {
 
 export async function markIntroVideoSeen() {
   return apiFetch<OnboardingProgress>("/onboarding/intro-video-seen", { method: "POST" });
+}
+
+// ---- Photo Studio (real image generation / editing; enhancement is not offered yet) ----
+
+export interface StudioImage {
+  id: string;
+  kind: "generated" | "edited" | "upload";
+  prompt: string | null;
+  style: string | null;
+  model: string | null;
+  width: number | null;
+  height: number | null;
+  source_image_id: string | null;
+  created_at: string;
+}
+export interface StudioStatus {
+  configured: boolean;
+  demo_workspace: boolean;
+  used_today: number;
+  daily_limit: number;
+  max_upload_mb: number;
+  styles: { key: string; label: string }[];
+  generate: { available: boolean; note: string | null };
+  edit: { available: boolean; note: string | null };
+  enhance: { available: boolean; note: string | null };
+}
+
+export const getStudioStatus = () => apiFetch<StudioStatus>("/photo-studio/status");
+export const listStudioHistory = () => apiFetch<StudioImage[]>("/photo-studio/history");
+export const studioGenerate = (body: { prompt: string; style: string; count: number }) =>
+  apiFetch<{ images: StudioImage[]; failed: number; message: string | null }>("/photo-studio/generate", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+export const deleteStudioImage = (id: string) => apiFetch<void>(`/photo-studio/images/${id}`, { method: "DELETE" });
+
+/** Multipart upload: the browser must set the Content-Type (with its boundary) itself, so this bypasses apiFetch's JSON header. */
+export async function studioEdit(prompt: string, image: File) {
+  const form = new FormData();
+  form.append("prompt", prompt);
+  form.append("image", image);
+  const headers: Record<string, string> = {};
+  if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+  const res = await fetch(`${API_BASE_URL}/photo-studio/edit`, { method: "POST", headers, body: form, credentials: "include" });
+  const body = await res.json();
+  if (!res.ok) {
+    const err = body?.error ?? { code: "unknown", message: "Request failed" };
+    throw new ApiError(res.status, err.code, err.message, err.details);
+  }
+  return body as { original: StudioImage; edited: StudioImage };
+}
+
+/** Images are private (org-scoped, bearer-authenticated), so <img src> can't fetch them directly: fetch the bytes with the token. */
+export async function fetchStudioImageBlob(id: string, download = false): Promise<Blob> {
+  const headers: Record<string, string> = {};
+  if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+  const res = await fetch(`${API_BASE_URL}/photo-studio/images/${id}${download ? "?download=true" : ""}`, { headers, credentials: "include" });
+  if (!res.ok) throw new ApiError(res.status, "image_unavailable", "That image could not be loaded.", null);
+  return res.blob();
 }
 
 export { API_BASE_URL };

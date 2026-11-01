@@ -2,8 +2,116 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-neutral-50 text-neutral-900 antialiased;
+/* ------------------------------------------------------------------------------------------------
+   NOVA design tokens (Visual Phase 1). Values are space-separated RGB triplets so Tailwind can apply
+   opacity (`bg-corona/10`). Light "paper" is the default; `.theme-ink` re-defines the same names for
+   cinematic / AI-focus surfaces (the NOVA Guide, intro) so components never hard-code a theme.
+   Tailwind maps these in tailwind.config.js; the concept reference is the approved HTML design page.
+   ------------------------------------------------------------------------------------------------ */
+:root {
+  --canvas: 246 245 242;
+  --raised: 255 255 255;
+  --sunken: 237 235 230;
+  --fg: 14 15 18;
+  --fg-2: 85 86 92;
+  --fg-3: 127 128 134;
+  --line: 231 229 223;
+  --line-strong: 209 206 197;
+  --inverse: 14 15 18;
+  --on-inverse: 246 245 242;
+  --corona: 255 91 31;
+  --corona-soft: 255 235 225;
+  --corona-ink: 184 58 11;
+  --on-corona: 255 255 255;
+  --ok: 23 138 91;
+  --ok-soft: 226 243 234;
+  --warn: 168 106 12;
+  --warn-soft: 251 239 214;
+  --bad: 201 55 44;
+  --bad-soft: 251 229 226;
+  --info: 47 95 208;
+  --info-soft: 228 235 250;
+
+  /* Motion tokens (mirrored in tailwind.config.js as duration-* / ease-*). */
+  --dur-instant: 120ms;
+  --dur-quick: 200ms;
+  --dur-standard: 320ms;
+  --dur-emphasis: 520ms;
+  --dur-cinematic: 900ms;
+  --ease-settle: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.theme-ink {
+  --canvas: 11 11 13;
+  --raised: 22 22 24;
+  --sunken: 31 31 34;
+  --fg: 244 243 239;
+  --fg-2: 166 166 172;
+  --fg-3: 133 133 139;
+  --line: 42 42 46;
+  --line-strong: 58 58 63;
+  --inverse: 244 243 239;
+  --on-inverse: 14 15 18;
+  --corona: 255 111 60;
+  --corona-soft: 43 24 16;
+  --corona-ink: 255 155 116;
+  --on-corona: 14 15 18;
+  --ok: 60 203 142;
+  --ok-soft: 15 43 32;
+  --warn: 240 178 62;
+  --warn-soft: 46 36 16;
+  --bad: 255 116 104;
+  --bad-soft: 53 24 25;
+  --info: 123 160 255;
+  --info-soft: 21 33 63;
+  color: rgb(var(--fg));
+}
+
+@layer base {
+  html {
+    font-family: theme("fontFamily.sans");
+    font-feature-settings: "ss01", "cv11";
+  }
+  body {
+    @apply bg-canvas text-fg antialiased;
+  }
+  ::selection {
+    background: rgb(var(--corona) / 0.22);
+  }
+  /* One visible focus treatment everywhere: Corona ring plus a soft halo. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--corona));
+    outline-offset: 2px;
+  }
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: none;
+    box-shadow: theme("boxShadow.focus");
+  }
+}
+
+@layer components {
+  /* Mono caps eyebrow used for labels and section kickers. */
+  .eyebrow {
+    @apply font-mono text-[10.5px] font-medium uppercase tracking-label text-fg-3;
+  }
+}
+
+/* Reduced motion: no travel, morphs or loops. State changes still happen, just without movement.
+   `!important` is deliberate so it also wins over the inline transitions the Guide sets. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* NovaFace (components/NovaFace.tsx) + NovaSpotlight (components/NovaSpotlight.tsx) — small,
@@ -19,8 +127,8 @@ body {
   50% { transform: scaleX(0.55); }
 }
 @keyframes nova-tap-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.55); }
-  100% { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0); }
+  0% { box-shadow: 0 0 0 0 rgb(var(--corona) / 0.55); }
+  100% { box-shadow: 0 0 0 12px rgb(var(--corona) / 0); }
 }
 .nova-face-eye {
   animation: nova-blink 4.5s ease-in-out infinite;
@@ -44,4 +152,24 @@ body {
 }
 .nova-pop-in {
   animation: nova-pop-in 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* The Guide's speaking indicator: three bars that move only while speech is really playing. */
+@keyframes nova-speaking {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
+}
+.nova-speaking-bar {
+  display: inline-block;
+  width: 2px;
+  height: 12px;
+  border-radius: 1px;
+  background: currentColor;
+  transform-origin: center;
+  animation: nova-speaking 900ms ease-in-out infinite;
+}
+.nova-speaking-bar:nth-child(2) { animation-delay: 150ms; }
+.nova-speaking-bar:nth-child(3) { animation-delay: 300ms; }
+@media (prefers-reduced-motion: reduce) {
+  .nova-speaking-bar { animation: none; transform: scaleY(0.7); }
 }

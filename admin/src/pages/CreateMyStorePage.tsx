@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { STOREFRONT_ORIGIN } from "../lib/storefrontUrl";
 import clsx from "clsx";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -143,24 +144,24 @@ function BrandInputForm({ onSubmitted }: { onSubmitted: () => void }) {
       className="max-w-lg space-y-4 rounded-lg border border-neutral-200 bg-white p-6"
     >
       <div>
-        <label className="mb-1 block text-sm font-medium">Brand / store name</label>
-        <input data-nova-target="brand_form.name" value={name} onChange={(e) => setName(e.target.value)} required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <label htmlFor="brand-name" className="mb-1 block text-sm font-medium">Brand / store name</label>
+        <input id="brand-name" data-nova-target="brand_form.name" value={name} onChange={(e) => setName(e.target.value)} required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
       </div>
       <div>
-        <label className="mb-1 block text-sm font-medium">What do you sell?</label>
-        <input data-nova-target="brand_form.sells_what" value={sellsWhat} onChange={(e) => setSellsWhat(e.target.value)} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" placeholder="Premium leather handbags" />
+        <label htmlFor="brand-sells_what" className="mb-1 block text-sm font-medium">What do you sell?</label>
+        <input id="brand-sells_what" data-nova-target="brand_form.sells_what" value={sellsWhat} onChange={(e) => setSellsWhat(e.target.value)} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" placeholder="Premium leather handbags" />
       </div>
       <div>
-        <label className="mb-1 block text-sm font-medium">Target customer</label>
-        <input data-nova-target="brand_form.target_customer" value={targetCustomer} onChange={(e) => setTargetCustomer(e.target.value)} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" placeholder="Women 22-40" />
+        <label htmlFor="brand-target_customer" className="mb-1 block text-sm font-medium">Target customer</label>
+        <input id="brand-target_customer" data-nova-target="brand_form.target_customer" value={targetCustomer} onChange={(e) => setTargetCustomer(e.target.value)} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" placeholder="Women 22-40" />
       </div>
       <div>
-        <label className="mb-1 block text-sm font-medium">Positioning</label>
-        <input data-nova-target="brand_form.positioning" value={positioning} onChange={(e) => setPositioning(e.target.value)} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" placeholder="Premium but accessible" />
+        <label htmlFor="brand-positioning" className="mb-1 block text-sm font-medium">Positioning</label>
+        <input id="brand-positioning" data-nova-target="brand_form.positioning" value={positioning} onChange={(e) => setPositioning(e.target.value)} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" placeholder="Premium but accessible" />
       </div>
       <div>
-        <label className="mb-1 block text-sm font-medium">Brand vibe</label>
-        <input data-nova-target="brand_form.vibe_text" value={vibeText} onChange={(e) => setVibeText(e.target.value)} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" placeholder="Minimal, luxurious, editorial" />
+        <label htmlFor="brand-vibe_text" className="mb-1 block text-sm font-medium">Brand vibe</label>
+        <input id="brand-vibe_text" data-nova-target="brand_form.vibe_text" value={vibeText} onChange={(e) => setVibeText(e.target.value)} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" placeholder="Minimal, luxurious, editorial" />
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button data-nova-target="brand_form.save" type="submit" disabled={mutation.isPending} className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white">
@@ -515,7 +516,7 @@ function ReadyForReviewPanel() {
         </Link>
         {draft && (
           <a
-            href={`http://localhost:5174/?preview=${draft.id}`}
+            href={`${STOREFRONT_ORIGIN}/?preview=${draft.id}`}
             target="_blank"
             rel="noreferrer"
             className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100"

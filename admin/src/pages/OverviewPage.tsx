@@ -1,28 +1,50 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import clsx from "clsx";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   createActionPlan,
+  getCustomerActivity,
   getLatestActionPlan,
   getLatestStoreHealth,
+  getLowStockProducts,
+  getOnboardingProgress,
+  getSalesSummary,
   getStoreHealth,
+  listProposals,
   type ActionPlan,
+  type StoreHealthFinding,
   type StoreHealthReport,
 } from "../api/client";
 import { useAuth } from "../lib/auth";
+import {
+  Badge,
+  Button,
+  buttonClass,
+  Card,
+  EmptyState,
+  ErrorState,
+  InsightCard,
+  LoadingState,
+  ProposalCard,
+  StatTile,
+  type BadgeTone,
+} from "../components/ui";
 
-const STATUS_COLOR: Record<string, string> = {
-  good: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  watch: "border-amber-200 bg-amber-50 text-amber-700",
-  at_risk: "border-red-200 bg-red-50 text-red-700",
+// Command Center. Everything on this page is real data from endpoints that already exist: the
+// analytics summaries, the latest Store Health report, the latest Action Plan and the pending
+// proposals. Nothing here is decorative or simulated.
+
+const STATUS_BADGE: Record<StoreHealthFinding["status"], { tone: BadgeTone; label: string }> = {
+  at_risk: { tone: "danger", label: "At risk" },
+  watch: { tone: "warning", label: "Watch" },
+  good: { tone: "success", label: "Healthy" },
 };
 
-const PROPOSAL_STATUS_COLOR: Record<string, string> = {
-  executed: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  proposed: "border-amber-200 bg-amber-50 text-amber-700",
-  rejected: "border-neutral-200 bg-neutral-100 text-neutral-500",
-  execution_failed: "border-red-200 bg-red-50 text-red-700",
+const PLAN_STATUS: Record<string, { tone: BadgeTone; label: string }> = {
+  executed: { tone: "success", label: "Done" },
+  proposed: { tone: "proposed", label: "Awaiting approval" },
+  rejected: { tone: "neutral", label: "Rejected" },
+  execution_failed: { tone: "danger", label: "Failed" },
 };
 
 const AGENT_LABEL: Record<string, string> = {
@@ -30,6 +52,22 @@ const AGENT_LABEL: Record<string, string> = {
   inventory_agent: "Inventory Agent",
   customer_agent: "Customer Agent",
 };
+
+// Which specialist produced a finding of each category (Store Manager delegates by domain).
+const CATEGORY_AGENT: Record<string, string> = {
+  sales: "sales_agent",
+  inventory: "inventory_agent",
+  customers: "customer_agent",
+};
+
+const TOOL_LABEL: Record<string, string> = {
+  draft_campaign: "Marketing — campaign draft",
+  cancel_order: "Operations — cancel order",
+  update_product_content: "Product — content update",
+  publish_storefront: "Storefront — publish",
+};
+
+const money = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
 // The point of Store Manager delegating to sub-agents (ARCHITECTURE.md "Store Manager
 // orchestration UI") should be visible, not just their prose summaries — which real tool(s) each
@@ -40,34 +78,63 @@ function DelegationTrace({ report }: { report: StoreHealthReport }) {
   if (agentKeys.length === 0) return null;
 
   return (
-    <div className="mt-4 border-t border-neutral-100 pt-4">
-      <button onClick={() => setOpen((o) => !o)} className="text-xs font-medium text-neutral-500 hover:text-neutral-700">
-        {open ? "Hide" : "Show"} delegation trace ({agentKeys.length} agents consulted)
+    <Card padded={false} className="overflow-hidden">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-sunken/60"
+      >
+        <span className="text-[13px] font-medium text-fg">
+          {open ? "Hide" : "Show"} delegation trace
+        </span>
+        <span className="text-xs text-fg-3">({agentKeys.length} agents consulted)</span>
       </button>
       {open && (
-        <div className="mt-3 space-y-3">
+        <div className="divide-y divide-line border-t border-line">
           {agentKeys.map((key) => (
-            <div key={key} className="rounded-md border border-neutral-100 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{AGENT_LABEL[key] ?? key}</p>
-              <div className="mt-1 flex flex-wrap gap-1">
+            <div key={key} className="space-y-2 px-4 py-3">
+              <p className="eyebrow">{AGENT_LABEL[key] ?? key}</p>
+              <div className="flex flex-wrap gap-1.5">
                 {report.trace[key]?.map((call, i) => (
-                  <span key={i} className="rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-[11px] font-mono text-neutral-600">
+                  <span key={i} className="inline-flex items-center gap-1.5 rounded border border-line bg-sunken px-1.5 py-0.5 font-mono text-[11px] text-fg-2">
+                    <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-ok" />
                     {call.name}()
                   </span>
                 ))}
               </div>
-              <p className="mt-2 text-sm text-neutral-700">{report.narrative[key]}</p>
+              <p className="text-sm text-fg-2">{report.narrative[key]}</p>
             </div>
           ))}
         </div>
       )}
-    </div>
+    </Card>
+  );
+}
+
+function Insight({ finding, report }: { finding: StoreHealthFinding; report: StoreHealthReport }) {
+  const agentKey = CATEGORY_AGENT[finding.category];
+  const tools = agentKey ? report.trace[agentKey]?.map((c) => c.name) ?? [] : [];
+  const status = STATUS_BADGE[finding.status];
+  return (
+    <InsightCard
+      badge={<Badge tone={status.tone}>{status.label}</Badge>}
+      source={agentKey ? AGENT_LABEL[agentKey] : finding.category}
+      title={finding.finding}
+      body={finding.suggested_action ? <>Suggested: {finding.suggested_action}</> : undefined}
+      evidence={tools.length ? { text: tools.join(" · ") } : null}
+    />
   );
 }
 
 export default function OverviewPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+
+  const { data: progress } = useQuery({ queryKey: ["onboarding-progress"], queryFn: getOnboardingProgress });
+  const { data: sales, isLoading: salesLoading } = useQuery({ queryKey: ["analytics-sales"], queryFn: () => getSalesSummary(30) });
+  const { data: lowStock } = useQuery({ queryKey: ["analytics-low-stock"], queryFn: getLowStockProducts });
+  const { data: customers } = useQuery({ queryKey: ["analytics-customers"], queryFn: () => getCustomerActivity(30) });
+  const { data: proposals } = useQuery({ queryKey: ["proposals"], queryFn: () => listProposals() });
 
   // "Needs attention" reads whatever Store Health last found — no fresh multi-agent run (and no
   // LLM calls) just from loading this page. "How is my store doing?" below is the explicit
@@ -97,112 +164,192 @@ export default function OverviewPage() {
 
   const report = healthMutation.data ?? latestReport ?? undefined;
   const plan = actionPlanMutation.data ?? latestPlan ?? undefined;
+  const pending = proposals?.filter((p) => p.status === "proposed") ?? [];
+  const attention = report?.findings.filter((f) => f.status !== "good") ?? [];
+  const healthy = report?.findings.filter((f) => f.status === "good") ?? [];
+  const onboardingIncomplete = !!progress && progress.current_step !== null;
+
+  const inactive = customers?.filter((c) => c.inactive).length;
+  const aov = sales && sales.orders > 0 ? sales.revenue / sales.orders : null;
 
   return (
-    <div>
-      <h1 className="text-xl font-semibold">Overview</h1>
-      <p className="mt-2 text-sm text-neutral-500">
-        Signed in as <span className="font-medium text-neutral-700">{user?.full_name}</span> ({user?.role}).
-      </p>
-
-      <div className="mt-6 max-w-md rounded-lg border border-neutral-200 bg-white p-6">
-        <h2 className="text-sm font-semibold">Create My Store</h2>
-        <p className="mt-1 text-sm text-neutral-500">
-          Tell NOVA about your brand and products — it turns raw input into a working store.
-        </p>
-        <Link to="/create-store" className="mt-4 inline-block rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white">
-          Start
-        </Link>
-      </div>
-
-      <div className="mt-6 rounded-lg border border-neutral-200 bg-white p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-semibold">Store Health</h2>
-            <p className="mt-1 text-sm text-neutral-500">
-              Store Manager delegates to Sales, Inventory, Customer, and Storefront agents for a real read on how the store is doing.
-            </p>
-          </div>
-          <button
-            data-nova-target="store_health.check"
-            onClick={() => healthMutation.mutate()}
-            disabled={healthMutation.isPending}
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-          >
-            {healthMutation.isPending ? "Checking…" : report ? "Refresh" : "How is my store doing?"}
-          </button>
+    <div className="space-y-8">
+      {/* Greeting: the one place the serif display face leads. */}
+      <header className="flex flex-wrap items-end justify-between gap-5">
+        <div className="max-w-2xl">
+          <p className="eyebrow">Command Center · last 30 days</p>
+          <h1 className="mt-2 font-display text-[44px] leading-[1.05] tracking-[-0.015em] text-fg sm:text-5xl">
+            {!report ? (
+              <>
+                Ask NOVA <span className="italic text-corona">how it's going.</span>
+              </>
+            ) : attention.length > 0 || pending.length > 0 ? (
+              <>
+                {attention.length + pending.length} {attention.length + pending.length === 1 ? "thing needs" : "things need"}{" "}
+                <span className="italic text-corona">you.</span>
+              </>
+            ) : (
+              <>
+                All clear, <span className="italic text-corona">{user?.full_name?.split(" ")[0] ?? "owner"}.</span>
+              </>
+            )}
+          </h1>
+          <p className="mt-3 text-[15px] leading-relaxed text-fg-2">
+            {report
+              ? "Everything below comes from your real orders, inventory and customers, with the evidence NOVA used."
+              : "Store Manager asks the Sales, Inventory and Customer agents for a real read on the business."}
+          </p>
         </div>
+        <Button
+          data-nova-target="store_health.check"
+          variant={report ? "secondary" : "ai"}
+          onClick={() => healthMutation.mutate()}
+          disabled={healthMutation.isPending}
+        >
+          {healthMutation.isPending ? "Checking…" : report ? "Refresh" : "How is my store doing?"}
+        </Button>
+      </header>
 
-        {healthMutation.isError && <p className="mt-3 text-sm text-red-600">{healthMutation.error.message}</p>}
+      {onboardingIncomplete && (
+        <Card className="flex flex-wrap items-center justify-between gap-4 !border-corona/40 !bg-corona-soft/50">
+          <div>
+            <h2 className="text-sm font-semibold">Create My Store</h2>
+            <p className="mt-0.5 text-sm text-fg-2">Tell NOVA about your brand and products — it turns raw input into a working store.</p>
+          </div>
+          <Link to="/create-store" className={buttonClass({ variant: "primary" })}>
+            Start
+          </Link>
+        </Card>
+      )}
 
-        {latestLoading && !report && <p className="mt-3 text-sm text-neutral-400">Loading…</p>}
+      <section aria-label="Key numbers" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatTile label="Revenue · 30 days" value={salesLoading ? "…" : money(sales?.revenue ?? 0)} hint={aov ? `Avg order ${money(aov)}` : undefined} />
+        <StatTile label="Orders" value={salesLoading ? "…" : (sales?.orders ?? 0).toLocaleString()} hint="Last 30 days" />
+        <StatTile label="Low-stock items" value={lowStock ? lowStock.length : "…"} hint={lowStock && lowStock.length > 0 ? <Badge tone="warning">Needs restock</Badge> : "All stocked"} />
+        <StatTile
+          label="Inactive customers"
+          value={inactive ?? "…"}
+          hint={customers ? `of ${customers.length} customers` : undefined}
+        />
+      </section>
 
-        {report && (
-          <div className="mt-4">
-            <p className="text-xs text-neutral-400">
-              As of {new Date(report.generated_at ?? Date.now()).toLocaleString()}
-            </p>
-            <div className="mt-2 space-y-2">
-              {report.findings.map((f) => (
-                <div key={`${f.category}-${f.metric}`} className="rounded-md border border-neutral-100 p-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs uppercase tracking-wide text-neutral-400">{f.category}</span>
-                      <span className={clsx("rounded border px-1.5 py-0.5 text-[11px]", STATUS_COLOR[f.status])}>{f.status}</span>
-                    </div>
-                    <span className="text-[11px] text-neutral-400">{f.severity} severity</span>
-                  </div>
-                  <p className="mt-1 text-sm">{f.finding}</p>
-                  {f.suggested_action && <p className="mt-1 text-xs text-neutral-500">Suggested: {f.suggested_action}</p>}
-                </div>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <section aria-label="Needs your decision" className="space-y-4">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-[17px] font-semibold tracking-tight">Needs your decision</h2>
+            {report && <span className="eyebrow">{attention.length} to review</span>}
+          </div>
+
+          {healthMutation.isError && (
+            <ErrorState
+              title="Couldn't read the store"
+              body={`${healthMutation.error.message} Nothing was changed. Your last results are still shown.`}
+              onRetry={() => healthMutation.mutate()}
+            />
+          )}
+
+          {latestLoading && !report && <LoadingState label="Loading the latest Store Health…" />}
+          {healthMutation.isPending && <LoadingState label="Store Manager is consulting the Sales, Inventory and Customer agents…" />}
+
+          {!latestLoading && !report && !healthMutation.isPending && (
+            <EmptyState
+              title="No Store Health review yet"
+              body="Run one and NOVA will list what needs attention here, each with the evidence it used."
+            />
+          )}
+
+          {report && (
+            <>
+              <p className="text-xs text-fg-3">As of {new Date(report.generated_at ?? Date.now()).toLocaleString()}</p>
+              {attention.map((f) => (
+                <Insight key={`${f.category}-${f.metric}`} finding={f} report={report} />
               ))}
-            </div>
-
-            <DelegationTrace report={report} />
-
-            <div className="mt-4 flex items-center justify-between border-t border-neutral-100 pt-4">
-              <p className="text-sm text-neutral-500">
-                Auto-fix low-risk issues now; anything sensitive goes to Approvals for review.
-              </p>
-              <button
-                data-nova-target="store_health.fix"
-                onClick={() => actionPlanMutation.mutate()}
-                disabled={actionPlanMutation.isPending}
-                className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-              >
-                {actionPlanMutation.isPending ? "Working…" : plan ? "Fix what you can (again)" : "Fix what you can"}
-              </button>
-            </div>
-
-            {actionPlanMutation.isError && <p className="mt-3 text-sm text-red-600">{actionPlanMutation.error.message}</p>}
-
-            {plan && (
-              <div className="mt-4">
-                <p className="text-xs text-neutral-400">
-                  Last action plan — {new Date(plan.generated_at ?? Date.now()).toLocaleString()}
-                </p>
-                <div className="mt-2 space-y-1">
-                  {plan.items.map((item) => (
-                    <div key={item.proposal_id} className="flex items-center justify-between rounded-md border border-neutral-100 px-3 py-2 text-sm">
-                      <span>{item.description}</span>
-                      <span
-                        className={clsx(
-                          "rounded border px-1.5 py-0.5 text-[11px]",
-                          PROPOSAL_STATUS_COLOR[item.status] ?? "border-neutral-200 bg-neutral-50 text-neutral-600",
-                        )}
-                      >
-                        {item.status === "executed" ? "done" : item.status === "proposed" ? "awaiting approval" : item.status}
-                      </span>
+              {attention.length === 0 && <EmptyState title="Nothing needs your attention" body="NOVA found no at-risk or watch items in the last review." />}
+              {healthy.length > 0 && (
+                <Card className="space-y-2.5">
+                  <p className="eyebrow">Healthy</p>
+                  {healthy.map((f) => (
+                    <div key={`${f.category}-${f.metric}`} className="flex items-start gap-3 text-sm">
+                      <Badge tone="success" className="shrink-0">
+                        {f.category}
+                      </Badge>
+                      <span className="text-fg-2">{f.finding}</span>
                     </div>
                   ))}
-                  {plan.items.length === 0 && (
-                    <p className="text-sm text-neutral-400">Nothing to fix — no real fixable issues found.</p>
+                </Card>
+              )}
+            </>
+          )}
+        </section>
+
+        <aside aria-label="Actions" className="space-y-5">
+          {report && (
+            <ProposalCard
+              stage={plan ? (plan.items.some((i) => i.status === "proposed") ? "proposed" : "applied") : "proposed"}
+              kicker="Action plan"
+              title={plan ? "What NOVA did and what's waiting" : "Fix what NOVA can"}
+              note={
+                plan
+                  ? `Last action plan — ${new Date(plan.generated_at ?? Date.now()).toLocaleString()}`
+                  : "Auto-fix low-risk issues now; anything sensitive goes to Approvals for review."
+              }
+              actions={
+                <div className="space-y-3">
+                  {plan && (
+                    <ul className="space-y-1.5">
+                      {plan.items.map((item) => {
+                        const s = PLAN_STATUS[item.status] ?? { tone: "neutral" as BadgeTone, label: item.status };
+                        return (
+                          <li key={item.proposal_id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-md border border-line px-3 py-2 text-sm">
+                            <span className="min-w-0">{item.description}</span>
+                            <Badge tone={s.tone}>{s.label}</Badge>
+                          </li>
+                        );
+                      })}
+                      {plan.items.length === 0 && <li className="text-sm text-fg-3">Nothing to fix — no real fixable issues found.</li>}
+                    </ul>
                   )}
+                  {actionPlanMutation.isError && <p className="text-sm text-bad">{actionPlanMutation.error.message}</p>}
+                  <Button
+                    data-nova-target="store_health.fix"
+                    variant="ai"
+                    onClick={() => actionPlanMutation.mutate()}
+                    disabled={actionPlanMutation.isPending}
+                    className="w-full"
+                  >
+                    {actionPlanMutation.isPending ? "Working…" : plan ? "Fix what you can (again)" : "Fix what you can"}
+                  </Button>
                 </div>
-              </div>
+              }
+            />
+          )}
+
+          <Card className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="eyebrow">Awaiting your approval</p>
+              {pending.length > 0 && <Badge tone="proposed">{pending.length}</Badge>}
+            </div>
+            {pending.length === 0 ? (
+              <p className="text-sm text-fg-3">No pending approvals.</p>
+            ) : (
+              <ul className="space-y-2">
+                {pending.slice(0, 4).map((p) => (
+                  <li key={p.id} className="flex items-center justify-between gap-3 rounded-md border border-dashed border-corona/70 bg-corona-soft/40 px-3 py-2 text-sm">
+                    <span className="min-w-0">{TOOL_LABEL[p.tool_name] ?? p.tool_name}</span>
+                    <Badge tone={p.risk_classification === "high" ? "danger" : "neutral"}>{p.risk_classification} risk</Badge>
+                  </li>
+                ))}
+              </ul>
             )}
-          </div>
-        )}
+            {pending.length > 0 && (
+              <Link to="/approvals" className={buttonClass({ variant: "secondary", size: "sm" }) + " w-full"}>
+                Review in Approvals
+              </Link>
+            )}
+          </Card>
+
+          {report && <DelegationTrace report={report} />}
+        </aside>
       </div>
     </div>
   );

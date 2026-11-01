@@ -1,15 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import { getCustomerActivity, getLowStockProducts, getSalesSummary } from "../api/client";
-
-function StatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-4">
-      <p className="text-xs uppercase tracking-wide text-neutral-400">{label}</p>
-      <p className="mt-1 text-2xl font-semibold">{value}</p>
-    </div>
-  );
-}
+import { StatTile } from "../components/ui";
 
 export default function AnalyticsPage() {
   const { data: sales, isLoading: salesLoading } = useQuery({ queryKey: ["analytics-sales"], queryFn: () => getSalesSummary(30) });
@@ -18,14 +10,14 @@ export default function AnalyticsPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold">Analytics</h1>
-      <p className="mt-1 text-sm text-neutral-500">Last 30 days.</p>
+      <p className="eyebrow">Grow · last 30 days</p>
+      <h1 className="mt-1 text-[28px] font-semibold leading-tight tracking-tight">Analytics</h1>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Revenue" value={salesLoading ? "…" : `$${(sales?.revenue ?? 0).toFixed(2)}`} />
-        <StatCard label="Orders" value={salesLoading ? "…" : sales?.orders ?? 0} />
-        <StatCard label="Low stock items" value={lowStock?.length ?? "…"} />
-        <StatCard label="Inactive customers" value={customers?.filter((c) => c.inactive).length ?? "…"} />
+      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatTile label="Revenue" value={salesLoading ? "…" : `$${(sales?.revenue ?? 0).toFixed(2)}`} />
+        <StatTile label="Orders" value={salesLoading ? "…" : sales?.orders ?? 0} />
+        <StatTile label="Low stock items" value={lowStock?.length ?? "…"} />
+        <StatTile label="Inactive customers" value={customers?.filter((c) => c.inactive).length ?? "…"} />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { ApiError } from "../api/client";
+import { Button, LabeledInput } from "../components/ui";
 import { useAuth } from "../lib/auth";
 
 export default function SignupPage() {
@@ -31,78 +32,38 @@ export default function SignupPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-        <h1 className="mb-1 text-lg font-semibold">Create your NOVA account</h1>
-        <p className="mb-6 text-sm text-neutral-500">One account, one store — let's get started.</p>
+      <div className="w-full max-w-sm rounded-xl border border-line bg-raised p-7 shadow-elev-2">
+        <div className="mb-6 flex items-center gap-2.5">
+          <span aria-hidden className="h-3 w-3 rounded-full bg-corona shadow-glow" />
+          <span className="text-lg font-semibold tracking-tight">NOVA</span>
+        </div>
+        <h1 className="mb-1 font-display text-3xl leading-tight tracking-[-0.015em]">
+          Create your <span className="italic text-corona">NOVA account</span>
+        </h1>
+        <p className="mb-6 text-sm text-fg-2">One account, one store — let's get started.</p>
         <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium" htmlFor="org_name">
-              Brand / store name
-            </label>
-            <input
-              id="org_name"
-              value={orgName}
-              onChange={(e) => setOrgName(e.target.value)}
-              placeholder="e.g. Aurora Goods"
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-              required
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium" htmlFor="full_name">
-              Your name
-            </label>
-            <input
-              id="full_name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-              autoComplete="name"
-              required
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium" htmlFor="email">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-              autoComplete="email"
-              required
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium" htmlFor="password">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-              autoComplete="new-password"
-              minLength={8}
-              required
-            />
-            <p className="mt-1 text-xs text-neutral-400">At least 8 characters.</p>
-          </div>
-          {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-          >
+          <LabeledInput id="org_name" label="Brand / store name" value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder="e.g. Aurora Goods" required />
+          <LabeledInput id="full_name" label="Your name" value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" required />
+          <LabeledInput id="email" label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
+          <LabeledInput
+            id="password"
+            label="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
+            minLength={8}
+            hint="At least 8 characters."
+            required
+          />
+          {error && <p role="alert" className="rounded-md bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
+          <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? "Creating your account…" : "Create account"}
-          </button>
+          </Button>
         </form>
-        <p className="mt-4 text-center text-xs text-neutral-400">
+        <p className="mt-4 text-center text-xs text-fg-3">
           Already have an account?{" "}
-          <Link to="/login" className="font-medium text-neutral-600 underline">
+          <Link to="/login" className="font-medium text-fg-2 underline">
             Sign in
           </Link>
         </p>

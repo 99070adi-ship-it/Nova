@@ -54,7 +54,7 @@ export default function AIWorkspacePage() {
       <h1 className="text-xl font-semibold">AI Workspace</h1>
       <p className="mt-1 text-sm text-neutral-500">Ask NOVA about your store. Sensitive actions go to Approvals.</p>
 
-      <div className="mt-3 flex gap-1.5">
+      <div className="mt-3 flex flex-wrap gap-1.5">
         {AGENTS.map((a) => (
           <button
             key={a.key}

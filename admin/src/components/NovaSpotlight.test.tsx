@@ -12,14 +12,12 @@ describe("NovaSpotlight — background blurs, the focused element doesn't", () =
     expect(container).toBeEmptyDOMElement();
   });
 
-  // jsdom doesn't recognize backdrop-filter as a valid CSS property and silently drops it from
-  // the serialized style attribute (a test-environment gap, not a real one — verified directly
-  // against the component's own style object), so these bands are identified by their background
-  // tint instead; the actual blur is a real inline style NovaSpotlight.tsx sets unconditionally.
+  // jsdom doesn't recognize backdrop-filter (or the token-based tint) as valid CSS and silently
+  // drops them from the serialized style (a test-environment gap, not a real one), so the bands are
+  // identified by their stable data attribute; the blur is a real inline style NovaSpotlight.tsx
+  // sets unconditionally on every band.
   function dimmedBands(container: HTMLElement) {
-    return Array.from(container.querySelectorAll("div")).filter(
-      (el) => el.style.backgroundColor === "rgba(10, 10, 10, 0.25)",
-    ) as HTMLElement[];
+    return Array.from(container.querySelectorAll("[data-nova-band]")) as HTMLElement[];
   }
 
   it("renders exactly four dimmed bands tiling everything outside the focused box", () => {
@@ -36,8 +34,15 @@ describe("NovaSpotlight — background blurs, the focused element doesn't", () =
 
   it("never blurs the focused element itself — no band covers the box's own area", () => {
     const { container } = render(<NovaSpotlight rect={rect({ top: 100, left: 50, width: 120, height: 40 })} />);
-    const ring = container.querySelector(".ring-amber-400") as HTMLElement;
+    const ring = container.querySelector("[data-nova-ring]") as HTMLElement;
     expect(ring.style.top).toBe("92px"); // 100 - 8 padding
     expect(ring.style.left).toBe("42px"); // 50 - 8 padding
+  });
+
+  it("in 'cue' mode (the user's turn) there is no blur or dim at all — only the ring and pointer", () => {
+    const { container } = render(<NovaSpotlight rect={rect()} mode="cue" />);
+    expect(dimmedBands(container)).toHaveLength(0);
+    expect(container.querySelector("[data-nova-ring]")).not.toBeNull();
+    expect(container.firstElementChild?.className).toContain("pointer-events-none");
   });
 });

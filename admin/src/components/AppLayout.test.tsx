@@ -6,12 +6,13 @@ import AppLayout from "./AppLayout";
 import { getOnboardingProgress } from "../api/client";
 import { useAuth } from "../lib/auth";
 
-vi.mock("../lib/auth", () => ({ useAuth: vi.fn() }));
+vi.mock("../lib/auth", () => ({ useAuth: vi.fn(), useCurrentUserKey: () => "test-user" }));
 vi.mock("../api/client", async () => {
   const actual = await vi.importActual<typeof import("../api/client")>("../api/client");
   return {
     ...actual,
     getOnboardingProgress: vi.fn(),
+    listProposals: vi.fn().mockResolvedValue([]),
     startConversation: vi.fn().mockResolvedValue({ id: "conv-1" }),
     postMessage: vi.fn().mockResolvedValue({ assistant_text: "Narration." }),
   };
@@ -50,10 +51,10 @@ describe("AppLayout — the app chrome is never blurred or disabled, even mid-on
     await waitFor(() => expect(getOnboardingProgress).toHaveBeenCalled());
     const aside = document.querySelector("aside")!;
     const header = document.querySelector("header")!;
-    expect(aside.className).not.toContain("blur");
+    expect(aside.className).not.toMatch(/(^|\s)blur/);
     expect(aside.className).not.toContain("pointer-events-none");
     expect(aside.className).not.toContain("opacity-50");
-    expect(header.className).not.toContain("blur");
+    expect(header.className).not.toMatch(/(^|\s)blur/); // a frosted sticky header (backdrop-blur) is fine; blurring the chrome is not
     expect(header.className).not.toContain("pointer-events-none");
     expect(screen.getByText("PAGE CONTENT")).toBeInTheDocument();
     // Every nav destination is a live link, not an inert block.

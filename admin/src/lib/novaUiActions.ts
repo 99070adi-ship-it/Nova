@@ -69,8 +69,14 @@ export async function runUIAction(action: UIAction, ctx: RunActionContext): Prom
         ctx.onSpotlight(null);
         return;
       }
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      await wait(320);
+      // Only scroll (and wait for the scroll) when the control is actually off-screen. A control
+      // that is already visible is spotlighted at once; the ring animates to it on its own.
+      const r = el.getBoundingClientRect();
+      const visible = r.top >= 0 && r.bottom <= window.innerHeight && r.left >= 0 && r.right <= window.innerWidth;
+      if (!visible) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        await wait(SCROLL_SETTLE_MS);
+      }
       ctx.onSpotlight(el.getBoundingClientRect());
       return;
     }
@@ -95,9 +101,14 @@ export async function runUIAction(action: UIAction, ctx: RunActionContext): Prom
   }
 }
 
-export async function runUIActions(actions: UIAction[], ctx: RunActionContext, pace = 450): Promise<void> {
-  for (const action of actions) {
-    await runUIAction(action, ctx);
-    await wait(pace);
+/** Time for a smooth scroll to land before measuring a control that was off-screen. */
+const SCROLL_SETTLE_MS = 280;
+/** A short beat between demo actions so each fill or highlight is seen, without dragging the demo out. */
+export const DEFAULT_ACTION_PACE_MS = 150;
+
+export async function runUIActions(actions: UIAction[], ctx: RunActionContext, pace = DEFAULT_ACTION_PACE_MS): Promise<void> {
+  for (let i = 0; i < actions.length; i++) {
+    await runUIAction(actions[i], ctx);
+    if (i < actions.length - 1) await wait(pace); // never a trailing pause after the last action
   }
 }

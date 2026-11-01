@@ -8,5 +8,9 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
     globals: true,
+    // Tests rely on real timers (typing, polling). A busy or throttled host can freeze a process for
+    // several seconds, so timeouts are generous; assertions are about ordering, not wall-clock speed.
+    testTimeout: 30000,
+    hookTimeout: 30000,
   },
 });

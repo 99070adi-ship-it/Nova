@@ -25,7 +25,7 @@ export default function NovaSpotlight({ rect, mode = "focus" }: { rect: DOMRect 
     position: "fixed",
     backdropFilter: "blur(6px)",
     WebkitBackdropFilter: "blur(6px)",
-    backgroundColor: "rgba(10, 10, 10, 0.25)",
+    backgroundColor: "rgb(var(--fg) / 0.28)",
     transition: MOVE,
   };
 
@@ -33,19 +33,20 @@ export default function NovaSpotlight({ rect, mode = "focus" }: { rect: DOMRect 
     <div className="pointer-events-none fixed inset-0 z-40" data-nova-spotlight={mode}>
       {mode === "focus" && (
         <>
-          <div style={{ ...band, top: 0, left: 0, width: "100%", height: box.top }} />
-          <div style={{ ...band, top: box.top + box.height, left: 0, width: "100%", bottom: 0 }} />
-          <div style={{ ...band, top: box.top, left: 0, width: box.left, height: box.height }} />
-          <div style={{ ...band, top: box.top, left: box.left + box.width, right: 0, height: box.height }} />
+          <div data-nova-band style={{ ...band, top: 0, left: 0, width: "100%", height: box.top }} />
+          <div data-nova-band style={{ ...band, top: box.top + box.height, left: 0, width: "100%", bottom: 0 }} />
+          <div data-nova-band style={{ ...band, top: box.top, left: 0, width: box.left, height: box.height }} />
+          <div data-nova-band style={{ ...band, top: box.top, left: box.left + box.width, right: 0, height: box.height }} />
         </>
       )}
 
       <div
-        className="absolute rounded-lg ring-2 ring-amber-400"
+        data-nova-ring
+        className="absolute rounded-lg ring-2 ring-corona"
         style={{ top: box.top, left: box.left, width: box.width, height: box.height, transition: MOVE }}
       />
       <div
-        className="nova-pointer-pulse absolute -ml-2 -mt-2 h-4 w-4 rounded-full border-2 border-white bg-amber-500"
+        className="nova-pointer-pulse absolute -ml-2 -mt-2 h-4 w-4 rounded-full border-2 border-white bg-corona"
         style={{
           top: pointer.top,
           left: pointer.left,

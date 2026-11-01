@@ -1,5 +1,5 @@
 // A small, deliberately simple face for NOVA — not a mascot asset, an SVG so there's nothing to
-// upload/license and it inherits the app's own neutral-900 palette. It's an animated character
+// upload/license and it uses the Corona token (NOVA's presence colour). It's an animated character
 // reacting to what's happening, not decoration: it blinks on its own (`index.css`'s nova-blink),
 // its eyes shift toward `look` (where the spotlight currently is, so it visibly reads as NOVA
 // looking at the thing it's about to touch), and its mouth animates only while `talking` is true
@@ -28,7 +28,7 @@ export default function NovaFace({
     <div
       role="img"
       aria-label="NOVA"
-      className="flex shrink-0 items-center justify-center rounded-full bg-neutral-900"
+      className="flex shrink-0 items-center justify-center rounded-full bg-corona shadow-glow"
       style={{ width: size, height: size }}
     >
       <svg viewBox="0 0 40 40" width={size * 0.62} height={size * 0.62}>
@@ -37,7 +37,7 @@ export default function NovaFace({
           cx={13 + eye.x}
           cy={17 + eye.y}
           r="3.2"
-          fill="white"
+          fill="rgb(var(--on-corona))"
           style={{ transition: "cx 300ms ease, cy 300ms ease" }}
         />
         <circle
@@ -45,7 +45,7 @@ export default function NovaFace({
           cx={27 + eye.x}
           cy={17 + eye.y}
           r="3.2"
-          fill="white"
+          fill="rgb(var(--on-corona))"
           style={{ transition: "cx 300ms ease, cy 300ms ease", animationDelay: "120ms" }}
         />
         <rect
@@ -55,7 +55,7 @@ export default function NovaFace({
           width="12"
           height={talking ? "5" : "2.2"}
           rx={talking ? "2.5" : "1.1"}
-          fill="white"
+          fill="rgb(var(--on-corona))"
           style={{ transition: "y 150ms ease, height 150ms ease" }}
         />
       </svg>

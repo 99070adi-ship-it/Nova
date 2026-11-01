@@ -81,6 +81,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/** The signed-in user's id, or null when there is no provider/user. Unlike `useAuth` it never throws, so
+ * UI that is only personalised by the user (the Guide's voice preference) can render anywhere. */
+export function useCurrentUserKey(): string | null {
+  return useContext(AuthContext)?.user?.id ?? null;
+}
+
 export function useAuth(): AuthState {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");

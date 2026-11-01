@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useState } from "react";
 import { ApiError, createProduct, listProducts } from "../api/client";
 import ProductImagesPanel from "../components/ProductImagesPanel";
+import { Badge, Button, Card, EmptyState, Field, Input, LoadingState, Table, Td, Th, Tr } from "../components/ui";
 
 export default function ProductsPage() {
   const queryClient = useQueryClient();
@@ -32,76 +33,73 @@ export default function ProductsPage() {
   });
 
   return (
-    <div>
-      <h1 className="text-xl font-semibold">Products</h1>
+    <div className="space-y-6">
+      <header>
+        <p className="eyebrow">Commerce</p>
+        <h1 className="mt-1 text-[28px] font-semibold leading-tight tracking-tight">Products</h1>
+      </header>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          createMutation.mutate();
-        }}
-        className="mt-4 flex flex-wrap items-end gap-2 rounded-lg border border-neutral-200 bg-white p-4"
-      >
-        <div>
-          <label className="mb-1 block text-xs font-medium text-neutral-600">Title</label>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-neutral-600">SKU</label>
-          <input value={sku} onChange={(e) => setSku(e.target.value)} required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-neutral-600">Price</label>
-          <input
-            type="number"
-            step="0.01"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            required
-            className="w-24 rounded-md border border-neutral-300 px-2 py-1 text-sm"
-          />
-        </div>
-        <button type="submit" disabled={createMutation.isPending} className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white">
-          Add product
-        </button>
-        {error && <span className="text-sm text-red-600">{error}</span>}
-      </form>
+      <Card>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            createMutation.mutate();
+          }}
+          className="flex flex-wrap items-end gap-3"
+        >
+          <Field label="Title" htmlFor="product-title" className="min-w-[200px] flex-1">
+            <Input id="product-title" value={title} onChange={(e) => setTitle(e.target.value)} required />
+          </Field>
+          <Field label="SKU" htmlFor="product-sku" className="w-40">
+            <Input id="product-sku" value={sku} onChange={(e) => setSku(e.target.value)} required />
+          </Field>
+          <Field label="Price" htmlFor="product-price" className="w-28">
+            <Input id="product-price" type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} required />
+          </Field>
+          <Button type="submit" disabled={createMutation.isPending}>
+            Add product
+          </Button>
+          {error && <span className="basis-full text-sm text-bad">{error}</span>}
+        </form>
+      </Card>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-neutral-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-xs uppercase text-neutral-500">
+      {isLoading && <LoadingState label="Loading products…" rows={4} />}
+
+      {products && products.length === 0 && (
+        <EmptyState title="No products yet" body="Add one above, or let NOVA build your catalog from Create My Store." />
+      )}
+
+      {products && products.length > 0 && (
+        <Table>
+          <thead>
             <tr>
-              <th className="px-4 py-2">Title</th>
-              <th className="px-4 py-2">Status</th>
-              <th className="px-4 py-2">SKU</th>
-              <th className="px-4 py-2">Price</th>
-              <th className="px-4 py-2"></th>
+              <Th>Title</Th>
+              <Th>Status</Th>
+              <Th>SKU</Th>
+              <Th>Price</Th>
+              <Th />
             </tr>
           </thead>
           <tbody>
-            {isLoading && (
-              <tr>
-                <td className="px-4 py-3 text-neutral-400" colSpan={5}>
-                  Loading…
-                </td>
-              </tr>
-            )}
-            {products?.map((p) => (
+            {products.map((p) => (
               <Fragment key={p.id}>
-                <tr className="border-b border-neutral-100 last:border-0">
-                  <td className="px-4 py-2 font-medium">{p.title}</td>
-                  <td className="px-4 py-2 text-neutral-500">{p.status}</td>
-                  <td className="px-4 py-2 text-neutral-500">{p.variants[0]?.sku}</td>
-                  <td className="px-4 py-2 text-neutral-500">${p.variants[0]?.price.toFixed(2)}</td>
-                  <td className="px-4 py-2 text-right">
-                    <button
-                      onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}
-                      className="text-xs text-neutral-500 hover:underline"
-                    >
+                <Tr>
+                  <Td className="font-medium">{p.title}</Td>
+                  <Td>
+                    <Badge tone={p.status === "published" ? "success" : "neutral"}>{p.status}</Badge>
+                  </Td>
+                  <Td num className="text-fg-2">
+                    {p.variants[0]?.sku}
+                  </Td>
+                  <Td num className="text-fg-2">
+                    ${p.variants[0]?.price.toFixed(2)}
+                  </Td>
+                  <Td className="text-right">
+                    <Button size="sm" variant="ghost" onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}>
                       {expandedId === p.id ? "Hide images" : "Images"}
-                    </button>
-                  </td>
-                </tr>
+                    </Button>
+                  </Td>
+                </Tr>
                 {expandedId === p.id && (
                   <tr>
                     <td colSpan={5} className="p-0">
@@ -111,16 +109,9 @@ export default function ProductsPage() {
                 )}
               </Fragment>
             ))}
-            {products?.length === 0 && (
-              <tr>
-                <td className="px-4 py-3 text-neutral-400" colSpan={5}>
-                  No products yet.
-                </td>
-              </tr>
-            )}
           </tbody>
-        </table>
-      </div>
+        </Table>
+      )}
     </div>
   );
 }

@@ -1,14 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import clsx from "clsx";
 import { approveProposal, listProposals, rejectProposal, type ToolProposal } from "../api/client";
+import { ApprovalBar, Badge, DiffRows, EmptyState, LoadingState, ProposalCard, type BadgeTone } from "../components/ui";
 
-const STATUS_COLOR: Record<string, string> = {
-  proposed: "bg-amber-50 text-amber-700 border-amber-200",
-  executed: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  rejected: "bg-neutral-100 text-neutral-500 border-neutral-200",
-  execution_failed: "bg-red-50 text-red-700 border-red-200",
-  stale: "bg-red-50 text-red-700 border-red-200",
-  expired: "bg-neutral-100 text-neutral-500 border-neutral-200",
+const STATUS_TONE: Record<string, BadgeTone> = {
+  proposed: "proposed",
+  executed: "success",
+  rejected: "neutral",
+  execution_failed: "danger",
+  stale: "danger",
+  expired: "neutral",
 };
 
 const TOOL_LABEL: Record<string, string> = {
@@ -30,34 +30,30 @@ function ProposalBody({ proposal }: { proposal: ToolProposal }) {
       campaign_copy?: string;
     };
     return (
-      <div className="mt-2 max-w-xl space-y-1.5 text-sm">
-        <p>
-          <span className="text-neutral-400">Goal:</span> {goal}
-        </p>
-        <p>
-          <span className="text-neutral-400">Target:</span> {target_segment}
-        </p>
-        <p className="rounded-md bg-neutral-50 p-2 text-neutral-700">{campaign_copy}</p>
-        <p className="text-[11px] text-neutral-400">Drafting only — nothing is sent to customers.</p>
-      </div>
+      <DiffRows
+        rows={[
+          { label: "Goal", value: goal },
+          { label: "Target", value: target_segment },
+          { label: "Copy", value: campaign_copy },
+          { label: "Sending", value: "Drafting only — nothing is sent to customers." },
+        ]}
+      />
     );
   }
 
   if (proposal.tool_name === "cancel_order") {
     const { order_id, reason } = proposal.arguments as { order_id?: string; reason?: string };
     return (
-      <div className="mt-2 max-w-xl space-y-1 text-sm">
-        <p>
-          <span className="text-neutral-400">Order:</span> <span className="font-mono text-xs">{order_id?.slice(0, 8)}</span>
-        </p>
-        <p>
-          <span className="text-neutral-400">Reason:</span> {reason}
-        </p>
-      </div>
+      <DiffRows
+        rows={[
+          { label: "Order", value: <span className="font-mono text-xs">{order_id?.slice(0, 8)}</span> },
+          { label: "Reason", value: reason },
+        ]}
+      />
     );
   }
 
-  return <pre className="mt-1 max-w-xl overflow-x-auto text-xs text-neutral-500">{JSON.stringify(proposal.arguments, null, 0)}</pre>;
+  return <pre className="max-w-full overflow-x-auto rounded-md bg-sunken p-3 font-mono text-xs text-fg-2">{JSON.stringify(proposal.arguments, null, 0)}</pre>;
 }
 
 export default function ApprovalsPage() {
@@ -78,51 +74,53 @@ export default function ApprovalsPage() {
   const resolved = proposals?.filter((p) => p.status !== "proposed") ?? [];
 
   return (
-    <div>
-      <h1 className="text-xl font-semibold">Approvals</h1>
-      <p className="mt-1 text-sm text-neutral-500">Sensitive AI actions wait here until a human approves them.</p>
+    <div className="space-y-6">
+      <header>
+        <p className="eyebrow">NOVA · human in the loop</p>
+        <h1 className="mt-1 text-[28px] font-semibold leading-tight tracking-tight">Approvals</h1>
+        <p className="mt-1.5 text-sm text-fg-2">Sensitive AI actions wait here until a human approves them.</p>
+      </header>
 
-      {isLoading && <p className="mt-4 text-sm text-neutral-400">Loading…</p>}
+      {isLoading && <LoadingState label="Loading proposals…" rows={2} />}
 
-      <div className="mt-4 space-y-2">
+      <div className="space-y-4">
         {pending.map((p) => (
-          <div key={p.id} className="rounded-lg border border-neutral-200 bg-white p-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{TOOL_LABEL[p.tool_name] ?? p.tool_name}</span>
-                  <span className={clsx("rounded border px-1.5 py-0.5 text-[11px]", p.risk_classification === "high" ? "border-red-200 bg-red-50 text-red-700" : "border-neutral-200 bg-neutral-50 text-neutral-600")}>
-                    {p.risk_classification} risk
-                  </span>
-                </div>
-                <ProposalBody proposal={p} />
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => approveMutation.mutate(p.id)} className="rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white">
-                  Approve
-                </button>
-                <button onClick={() => rejectMutation.mutate(p.id)} className="rounded-md border border-neutral-300 px-3 py-1 text-xs">
-                  Reject
-                </button>
-              </div>
-            </div>
-          </div>
+          <ProposalCard
+            key={p.id}
+            stage="proposed"
+            kicker={`${p.risk_classification} risk`}
+            title={TOOL_LABEL[p.tool_name] ?? p.tool_name}
+            actions={
+              <ApprovalBar
+                onApprove={() => approveMutation.mutate(p.id)}
+                onReject={() => rejectMutation.mutate(p.id)}
+                pending={approveMutation.isPending || rejectMutation.isPending}
+              />
+            }
+          >
+            <ProposalBody proposal={p} />
+          </ProposalCard>
         ))}
-        {pending.length === 0 && !isLoading && <p className="text-sm text-neutral-400">No pending approvals.</p>}
+        {pending.length === 0 && !isLoading && (
+          <EmptyState
+            title="No pending approvals"
+            body="When NOVA finds something that needs a decision, it will appear here with exactly what it would do."
+          />
+        )}
       </div>
 
       {resolved.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-sm font-semibold text-neutral-500">Resolved</h2>
-          <div className="mt-2 space-y-1">
+        <section className="pt-2">
+          <h2 className="eyebrow">Resolved</h2>
+          <ul className="mt-3 divide-y divide-line overflow-hidden rounded-lg border border-line bg-raised">
             {resolved.map((p) => (
-              <div key={p.id} className="flex items-center justify-between rounded-md border border-neutral-100 px-3 py-2 text-sm">
+              <li key={p.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
                 <span>{TOOL_LABEL[p.tool_name] ?? p.tool_name}</span>
-                <span className={clsx("rounded border px-1.5 py-0.5 text-[11px]", STATUS_COLOR[p.status])}>{p.status}</span>
-              </div>
+                <Badge tone={STATUS_TONE[p.status] ?? "neutral"}>{p.status}</Badge>
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
+        </section>
       )}
     </div>
   );

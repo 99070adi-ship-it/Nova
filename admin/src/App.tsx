@@ -10,6 +10,7 @@ import CustomersPage from "./pages/CustomersPage";
 import InventoryPage from "./pages/InventoryPage";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
+import PhotoStudioPage from "./pages/PhotoStudioPage";
 import OrdersPage from "./pages/OrdersPage";
 import OverviewPage from "./pages/OverviewPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
@@ -49,6 +50,7 @@ export default function App() {
           <Route path="/marketing" element={<PlaceholderPage title="Marketing" phase="P8" />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/ai-workspace" element={<AIWorkspacePage />} />
+          <Route path="/photo-studio" element={<PhotoStudioPage />} />
           <Route path="/approvals" element={<ApprovalsPage />} />
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/settings" element={<PlaceholderPage title="Settings" phase="P2" />} />

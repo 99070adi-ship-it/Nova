@@ -30,9 +30,9 @@ describe("LESSON_STEPS — every lesson defines a clear, deterministic next acti
     // real key, not silently be undefined.
     expect(primaryActionTarget(step)).toBeTruthy();
 
-    expect(step.demoPrompt.length).toBeGreaterThan(10);
-    expect(step.explainPrompt.length).toBeGreaterThan(10);
-    expect(step.completePrompt.length).toBeGreaterThan(10);
+    expect(step.intro.length).toBeGreaterThan(5);
+    expect(step.explain.length).toBeGreaterThan(5);
+    expect(step.done.length).toBeGreaterThan(5);
     expect(step.afterActionHint.length).toBeGreaterThan(5);
   });
 
@@ -70,6 +70,40 @@ describe("LESSON_STEPS — every lesson defines a clear, deterministic next acti
 
 // ---- Server contract (contracts/onboarding-steps.json, owned by backend STEP_DEFINITIONS) ----
 import contract from "../../../contracts/onboarding-steps.json";
+
+// Every line is typed (6 characters per second in Text only) and spoken, so each is written to a budget: a
+// beat or two, never a paragraph. The playful copy is longer than the bare instructions it replaced, but a
+// single line still stays under about 20 seconds of typing, and a whole lesson well under a minute.
+const BUDGET = { intro: 115, explain: 125, done: 100, respond: 90, perStep: 300 };
+const visibleChars = (t: string) => t.replace(/\s/g, "").length;
+const sentences = (t: string) => t.split(/(?<=[.!?])\s+/).filter(Boolean).length;
+
+describe("LESSON_STEPS narration is concise enough to type and speak", () => {
+  it.each(LESSON_STEPS)("$key: every line fits its character budget, in at most three sentences", (step) => {
+    expect(step.intro.length).toBeLessThanOrEqual(BUDGET.intro);
+    expect(step.explain.length).toBeLessThanOrEqual(BUDGET.explain);
+    expect(step.done.length).toBeLessThanOrEqual(BUDGET.done);
+    if (step.respond) expect(step.respond.length).toBeLessThanOrEqual(BUDGET.respond);
+    for (const text of [step.intro, step.explain, step.done, step.respond].filter((t): t is string => !!t)) {
+      expect(sentences(text)).toBeLessThanOrEqual(3);
+      expect(text.trim()).toBe(text);
+      expect(text).toMatch(/[.!?]$/);
+    }
+    const total = [step.intro, step.explain, step.done, step.respond ?? ""].reduce((n, t) => n + visibleChars(t), 0);
+    expect(total).toBeLessThanOrEqual(BUDGET.perStep);
+    expect(total / 6).toBeLessThanOrEqual(60); // seconds of typing at 6 characters per second
+  });
+
+  it("keeps the essential instruction in the explanation where the task needs one (not just shortened away)", () => {
+    const nl = LESSON_STEPS.find((l) => l.key === "nl_edit")!;
+    expect(nl.explain.toLowerCase()).toMatch(/propose/);
+    expect(nl.explain.toLowerCase()).toMatch(/apply/);
+    const run = LESSON_STEPS.find((l) => l.key === "run_business")!;
+    expect(run.explain.toLowerCase()).toMatch(/wait/); // risky actions wait for the owner
+    const review = LESSON_STEPS.find((l) => l.key === "review")!;
+    expect(review.explain.toLowerCase()).toMatch(/accept/);
+  });
+});
 
 describe("LESSON_STEPS vs the backend's canonical onboarding steps", () => {
   it("has a lesson for every server-defined step, in the server's order", () => {

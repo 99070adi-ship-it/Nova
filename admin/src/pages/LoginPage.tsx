@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError } from "../api/client";
+import { Button, LabeledInput } from "../components/ui";
 import { useAuth } from "../lib/auth";
-import { DEMO_CREDENTIALS } from "../lib/demo";
+import { DEMO_CREDENTIALS, PRODUCT_FILM_POSTER_URL, PRODUCT_FILM_URL } from "../lib/demo";
+import { usePrefersReducedMotion, useSmallOrSavingData } from "../lib/useFilmMedia";
 
 export default function LoginPage() {
   const { login, enterDemo } = useAuth();
@@ -11,6 +13,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState(DEMO_CREDENTIALS.password);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Decorative film behind the form: the same file the landing page already fetched (so the browser
+  // cache serves it), muted and looping. Phones, Data Saver and reduced motion get the still poster;
+  // a video that errors falls back to the poster, and the form never depends on either.
+  const [mounted, setMounted] = useState(false);
+  const [videoFailed, setVideoFailed] = useState(false);
+  const stillOnly = usePrefersReducedMotion() || useSmallOrSavingData();
+  useEffect(() => setMounted(true), []);
+  const showVideo = mounted && !stillOnly && !videoFailed && !!PRODUCT_FILM_URL;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -37,49 +47,46 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-        <h1 className="mb-1 text-lg font-semibold">NOVA</h1>
-        <p className="mb-6 text-sm text-neutral-500">Sign in to your store</p>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-black px-4">
+      {PRODUCT_FILM_URL && (
+        <div aria-hidden className="absolute inset-0">
+          {showVideo ? (
+            <video
+              src={PRODUCT_FILM_URL}
+              poster={PRODUCT_FILM_POSTER_URL}
+              autoPlay
+              muted
+              loop
+              playsInline
+              tabIndex={-1}
+              onError={() => setVideoFailed(true)}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <img src={PRODUCT_FILM_POSTER_URL} alt="" className="h-full w-full object-cover" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-br from-black/85 via-black/65 to-black/85" />
+        </div>
+      )}
+      <div className="relative z-10 w-full max-w-sm rounded-xl border border-line bg-raised p-7 shadow-elev-2">
+        <div className="mb-6 flex items-center gap-2.5">
+          <span aria-hidden className="h-3 w-3 rounded-full bg-corona shadow-glow" />
+          <h1 className="text-lg font-semibold tracking-tight">NOVA</h1>
+        </div>
+        <p className="mb-6 font-display text-3xl leading-tight tracking-[-0.015em]">
+          Sign in to <span className="italic text-corona">your store.</span>
+        </p>
         <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium" htmlFor="email">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-              autoComplete="email"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium" htmlFor="password">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-              autoComplete="current-password"
-            />
-          </div>
-          {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-          >
+          <LabeledInput id="email" label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+          <LabeledInput id="password" label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+          {error && <p role="alert" className="rounded-md bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
+          <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? "Signing in…" : "Sign in"}
-          </button>
+          </Button>
         </form>
-        <p className="mt-4 text-center text-xs text-neutral-400">
+        <p className="mt-4 text-center text-xs text-fg-3">
           New to NOVA?{" "}
-          <Link to="/signup" className="font-medium text-neutral-600 underline">
+          <Link to="/signup" className="font-medium text-fg-2 underline">
             Create an account
           </Link>
         </p>
