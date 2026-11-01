@@ -17,14 +17,23 @@ services:
 
   backend:
     build: ./backend
+    env_file:
+      - path: ./backend/.env
+        required: false
     depends_on:
       db:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql+asyncpg://nova:nova@db:5432/nova
-      AI_PROVIDER: fake
+      # AI_PROVIDER / NVIDIA_* come from backend/.env (env_file above), not from here: pinning them here would override that file.
       IMAGE_PROVIDER: fake
       JWT_SECRET: dev-secret-change-me-please-32-bytes-minimum
+      # Voice: self-hosted Kokoro (no API key). The model is cached in the named volume below so it is
+      # downloaded once, not per container. Needs roughly 2 GB RAM free for the voice model.
+      TTS_PROVIDER: kokoro
+      HF_HOME: /models/huggingface
+    volumes:
+      - model_cache:/models
     ports:
       - "8100:8000"
     command: >
@@ -32,3 +41,4 @@ services:
 
 volumes:
   db_data:
+  model_cache:

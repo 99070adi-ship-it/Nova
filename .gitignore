@@ -24,3 +24,9 @@ dist/
 
 # Vercel (if ever linked)
 .vercel/
+
+# Local artifacts that don't belong in the repo
+*.zip
+video/
+e2e/artifacts/
+*.log

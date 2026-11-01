@@ -1,0 +1,677 @@
+{
+  "elements": [
+    {
+      "key": "hero.headline",
+      "label": "Hero headline",
+      "properties": [
+        {
+          "kind": "text",
+          "label": "Headline",
+          "max_length": 90,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": null,
+          "path": "headline"
+        }
+      ],
+      "section_type": "hero",
+      "suggestions": [
+        "Make it sound more premium and editorial, but keep it short",
+        "Make it shorter",
+        "Make it warmer and more welcoming"
+      ]
+    },
+    {
+      "key": "hero.subheadline",
+      "label": "Hero subheadline",
+      "properties": [
+        {
+          "kind": "textarea",
+          "label": "Subheadline",
+          "max_length": 220,
+          "maximum": null,
+          "minimum": null,
+          "optional": true,
+          "options": null,
+          "path": "subheadline"
+        }
+      ],
+      "section_type": "hero",
+      "suggestions": [
+        "Make it more concise",
+        "Make it sound more premium",
+        "Say that every piece is made to last"
+      ]
+    },
+    {
+      "key": "hero.cta",
+      "label": "Hero button",
+      "properties": [
+        {
+          "kind": "text",
+          "label": "Button label",
+          "max_length": 30,
+          "maximum": null,
+          "minimum": null,
+          "optional": true,
+          "options": null,
+          "path": "cta_text"
+        },
+        {
+          "kind": "link",
+          "label": "Button link",
+          "max_length": 300,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": null,
+          "path": "cta_href"
+        }
+      ],
+      "section_type": "hero",
+      "suggestions": [
+        "Change the label to 'Discover the collection'",
+        "Make the label shorter",
+        "Link it to all products"
+      ]
+    },
+    {
+      "key": "hero.image",
+      "label": "Hero image",
+      "properties": [
+        {
+          "kind": "image_url",
+          "label": "Image",
+          "max_length": 500,
+          "maximum": null,
+          "minimum": null,
+          "optional": true,
+          "options": null,
+          "path": "image_url"
+        }
+      ],
+      "section_type": "hero",
+      "suggestions": [
+        "Remove the image",
+        "Use the Structured Tote photo"
+      ]
+    },
+    {
+      "key": "hero.section",
+      "label": "Section style",
+      "properties": [
+        {
+          "kind": "enum",
+          "label": "Alignment",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": [
+            "left",
+            "center"
+          ],
+          "path": "align"
+        },
+        {
+          "kind": "enum",
+          "label": "Background",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": [
+            "default",
+            "surface",
+            "inverse"
+          ],
+          "path": "background"
+        },
+        {
+          "kind": "enum",
+          "label": "Spacing",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": [
+            "compact",
+            "regular",
+            "spacious"
+          ],
+          "path": "spacing"
+        }
+      ],
+      "section_type": "hero",
+      "suggestions": [
+        "Give this section more breathing room",
+        "Use a dark background",
+        "Make it feel quieter and more spacious"
+      ]
+    },
+    {
+      "key": "product_grid.heading",
+      "label": "Product grid heading",
+      "properties": [
+        {
+          "kind": "text",
+          "label": "Heading",
+          "max_length": 70,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": null,
+          "path": "title"
+        }
+      ],
+      "section_type": "product_grid",
+      "suggestions": [
+        "Make the heading more editorial",
+        "Call it 'Best sellers'"
+      ]
+    },
+    {
+      "key": "product_grid.products",
+      "label": "Product grid products",
+      "properties": [
+        {
+          "kind": "collection_id",
+          "label": "Collection",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": true,
+          "options": null,
+          "path": "collection_id"
+        },
+        {
+          "kind": "int",
+          "label": "Number of products",
+          "max_length": null,
+          "maximum": 24,
+          "minimum": 1,
+          "optional": false,
+          "options": null,
+          "path": "limit"
+        }
+      ],
+      "section_type": "product_grid",
+      "suggestions": [
+        "Show only 4 products",
+        "Feature the Signature Totes collection",
+        "Show products from all collections"
+      ]
+    },
+    {
+      "key": "product_grid.section",
+      "label": "Section style",
+      "properties": [
+        {
+          "kind": "enum",
+          "label": "Background",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": [
+            "default",
+            "surface",
+            "inverse"
+          ],
+          "path": "background"
+        },
+        {
+          "kind": "enum",
+          "label": "Spacing",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": [
+            "compact",
+            "regular",
+            "spacious"
+          ],
+          "path": "spacing"
+        }
+      ],
+      "section_type": "product_grid",
+      "suggestions": [
+        "Give this section more breathing room",
+        "Use a dark background",
+        "Make it feel quieter and more spacious"
+      ]
+    },
+    {
+      "key": "collection_grid.heading",
+      "label": "Collections heading",
+      "properties": [
+        {
+          "kind": "text",
+          "label": "Heading",
+          "max_length": 70,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": null,
+          "path": "title"
+        }
+      ],
+      "section_type": "collection_grid",
+      "suggestions": [
+        "Make the heading shorter",
+        "Make it more inviting"
+      ]
+    },
+    {
+      "key": "collection_grid.collections",
+      "label": "Collection tiles",
+      "properties": [
+        {
+          "kind": "int",
+          "label": "Number of collections",
+          "max_length": null,
+          "maximum": 12,
+          "minimum": 1,
+          "optional": false,
+          "options": null,
+          "path": "limit"
+        }
+      ],
+      "section_type": "collection_grid",
+      "suggestions": [
+        "Show only 3 collections"
+      ]
+    },
+    {
+      "key": "collection_grid.section",
+      "label": "Section style",
+      "properties": [
+        {
+          "kind": "enum",
+          "label": "Background",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": [
+            "default",
+            "surface",
+            "inverse"
+          ],
+          "path": "background"
+        },
+        {
+          "kind": "enum",
+          "label": "Spacing",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": [
+            "compact",
+            "regular",
+            "spacious"
+          ],
+          "path": "spacing"
+        }
+      ],
+      "section_type": "collection_grid",
+      "suggestions": [
+        "Give this section more breathing room",
+        "Use a dark background",
+        "Make it feel quieter and more spacious"
+      ]
+    },
+    {
+      "key": "feature_banner.eyebrow",
+      "label": "Banner eyebrow",
+      "properties": [
+        {
+          "kind": "text",
+          "label": "Eyebrow",
+          "max_length": 40,
+          "maximum": null,
+          "minimum": null,
+          "optional": true,
+          "options": null,
+          "path": "eyebrow"
+        }
+      ],
+      "section_type": "feature_banner",
+      "suggestions": [
+        "Make it shorter"
+      ]
+    },
+    {
+      "key": "feature_banner.heading",
+      "label": "Banner heading",
+      "properties": [
+        {
+          "kind": "text",
+          "label": "Heading",
+          "max_length": 110,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": null,
+          "path": "heading"
+        }
+      ],
+      "section_type": "feature_banner",
+      "suggestions": [
+        "Make it more editorial",
+        "Make it shorter and bolder"
+      ]
+    },
+    {
+      "key": "feature_banner.body",
+      "label": "Banner text",
+      "properties": [
+        {
+          "kind": "textarea",
+          "label": "Text",
+          "max_length": 240,
+          "maximum": null,
+          "minimum": null,
+          "optional": true,
+          "options": null,
+          "path": "body"
+        }
+      ],
+      "section_type": "feature_banner",
+      "suggestions": [
+        "Make it more concise",
+        "Make it sound more premium"
+      ]
+    },
+    {
+      "key": "feature_banner.cta",
+      "label": "Banner button",
+      "properties": [
+        {
+          "kind": "text",
+          "label": "Button label",
+          "max_length": 30,
+          "maximum": null,
+          "minimum": null,
+          "optional": true,
+          "options": null,
+          "path": "cta_text"
+        },
+        {
+          "kind": "link",
+          "label": "Button link",
+          "max_length": 300,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": null,
+          "path": "cta_href"
+        }
+      ],
+      "section_type": "feature_banner",
+      "suggestions": [
+        "Change the label to 'Explore now'",
+        "Link it to all products"
+      ]
+    },
+    {
+      "key": "feature_banner.section",
+      "label": "Section style",
+      "properties": [
+        {
+          "kind": "enum",
+          "label": "Alignment",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": [
+            "left",
+            "center"
+          ],
+          "path": "align"
+        },
+        {
+          "kind": "enum",
+          "label": "Background",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": [
+            "default",
+            "surface",
+            "inverse"
+          ],
+          "path": "background"
+        },
+        {
+          "kind": "enum",
+          "label": "Spacing",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": [
+            "compact",
+            "regular",
+            "spacious"
+          ],
+          "path": "spacing"
+        }
+      ],
+      "section_type": "feature_banner",
+      "suggestions": [
+        "Give this section more breathing room",
+        "Use a dark background",
+        "Make it feel quieter and more spacious"
+      ]
+    },
+    {
+      "key": "brand_story.heading",
+      "label": "Story heading",
+      "properties": [
+        {
+          "kind": "text",
+          "label": "Heading",
+          "max_length": 110,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": null,
+          "path": "heading"
+        }
+      ],
+      "section_type": "brand_story",
+      "suggestions": [
+        "Make it more editorial",
+        "Make it shorter"
+      ]
+    },
+    {
+      "key": "brand_story.body",
+      "label": "Story text",
+      "properties": [
+        {
+          "kind": "textarea",
+          "label": "Text",
+          "max_length": 600,
+          "maximum": null,
+          "minimum": null,
+          "optional": true,
+          "options": null,
+          "path": "body"
+        }
+      ],
+      "section_type": "brand_story",
+      "suggestions": [
+        "Make it more concise",
+        "Make it warmer",
+        "Make it sound more premium"
+      ]
+    },
+    {
+      "key": "brand_story.section",
+      "label": "Section style",
+      "properties": [
+        {
+          "kind": "enum",
+          "label": "Alignment",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": [
+            "left",
+            "center"
+          ],
+          "path": "align"
+        },
+        {
+          "kind": "enum",
+          "label": "Background",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": [
+            "default",
+            "surface",
+            "inverse"
+          ],
+          "path": "background"
+        },
+        {
+          "kind": "enum",
+          "label": "Spacing",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": [
+            "compact",
+            "regular",
+            "spacious"
+          ],
+          "path": "spacing"
+        }
+      ],
+      "section_type": "brand_story",
+      "suggestions": [
+        "Give this section more breathing room",
+        "Use a dark background",
+        "Make it feel quieter and more spacious"
+      ]
+    },
+    {
+      "key": "theme.style",
+      "label": "Theme",
+      "properties": [
+        {
+          "kind": "color",
+          "label": "Text and button color",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": null,
+          "path": "primary_color"
+        },
+        {
+          "kind": "color",
+          "label": "Background color",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": null,
+          "path": "background_color"
+        },
+        {
+          "kind": "enum",
+          "label": "Typography",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": [
+            "System",
+            "Cormorant Garamond",
+            "Playfair Display",
+            "Inter",
+            "DM Sans"
+          ],
+          "path": "font_family"
+        },
+        {
+          "kind": "enum",
+          "label": "Corner radius",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": [
+            "0px",
+            "2px",
+            "4px",
+            "8px",
+            "12px",
+            "999px"
+          ],
+          "path": "border_radius"
+        },
+        {
+          "kind": "enum",
+          "label": "Button style",
+          "max_length": null,
+          "maximum": null,
+          "minimum": null,
+          "optional": false,
+          "options": [
+            "filled",
+            "outline"
+          ],
+          "path": "button_style"
+        }
+      ],
+      "section_type": null,
+      "suggestions": [
+        "Use a warmer cream background",
+        "Switch to a classic serif typeface",
+        "Make corners rounder and buttons outlined"
+      ]
+    }
+  ],
+  "fonts": {
+    "Cormorant Garamond": "'Cormorant Garamond', Georgia, serif",
+    "DM Sans": "'DM Sans', system-ui, sans-serif",
+    "Inter": "'Inter', system-ui, sans-serif",
+    "Playfair Display": "'Playfair Display', Georgia, serif",
+    "System": "system-ui, sans-serif"
+  },
+  "section_types": [
+    {
+      "label": "Hero",
+      "type": "hero"
+    },
+    {
+      "label": "Product grid",
+      "type": "product_grid"
+    },
+    {
+      "label": "Collections",
+      "type": "collection_grid"
+    },
+    {
+      "label": "Feature banner",
+      "type": "feature_banner"
+    },
+    {
+      "label": "Brand story",
+      "type": "brand_story"
+    }
+  ]
+}
