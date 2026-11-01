@@ -1,29 +1,29 @@
-import { Link } from "react-router-dom";
-import { recordEvent } from "../../api/client";
+import { assetUrl, recordEvent } from "../../api/client";
+import { ed } from "../../editor/ed";
+import { pick } from "../SectionRenderer";
+import Img from "../Img";
+import { Cta, str } from "./common";
 
-interface Props {
-  configuration: Record<string, unknown>;
-}
-
-export default function Hero({ configuration }: Props) {
-  const headline = (configuration.headline as string) ?? "Welcome";
-  const subheadline = configuration.subheadline as string | undefined;
-  const ctaText = configuration.cta_text as string | undefined;
-  const ctaHref = (configuration.cta_href as string) ?? "/products";
-
+export default function Hero({ configuration: c }: { configuration: Record<string, unknown> }) {
+  const headline = str(c.headline) ?? "Welcome";
+  const sub = str(c.subheadline);
+  const image = assetUrl(c.image_url);
+  const align = pick(c.align, ["left", "center"] as const, image ? "left" : "center");
+  const centered = align === "center";
   return (
-    <section className="flex flex-col items-center justify-center px-6 py-24 text-center">
-      <h1 className="text-4xl font-semibold tracking-tight">{headline}</h1>
-      {subheadline && <p className="mt-3 text-lg text-neutral-500">{subheadline}</p>}
-      {ctaText && (
-        <Link
-          to={ctaHref === "/shop" ? "/products" : ctaHref}
-          onClick={() => recordEvent("hero_click")}
-          className="mt-8 rounded-full bg-neutral-900 px-6 py-3 text-sm font-medium text-white"
-        >
-          {ctaText}
-        </Link>
+    <div className={`mx-auto grid max-w-6xl items-center gap-10 px-5 ${image && !centered ? "md:grid-cols-2" : ""}`}>
+      <div className={centered ? "mx-auto max-w-2xl text-center" : ""}>
+        <h1 className="text-4xl font-medium leading-[1.08] tracking-tight md:text-6xl" {...ed("hero.headline")}>{headline}</h1>
+        {sub && <p className={`mt-5 max-w-xl text-lg text-muted ${centered ? "mx-auto" : ""}`} {...ed("hero.subheadline")}>{sub}</p>}
+        <div className="mt-9" {...(str(c.cta_text) ? ed("hero.cta") : {})}>
+          <Cta text={str(c.cta_text)} href={str(c.cta_href)} className="sf-btn" onClick={() => recordEvent("hero_click")} />
+        </div>
+      </div>
+      {image && (
+        <div {...ed("hero.image")} className={centered ? "mx-auto w-full max-w-md" : ""}>
+          <Img src={image} alt="" className="aspect-square w-full rounded-theme" fallbackLabel={headline} />
+        </div>
       )}
-    </section>
+    </div>
   );
 }

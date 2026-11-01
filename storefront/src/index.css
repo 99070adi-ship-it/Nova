@@ -2,6 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-white text-neutral-900 antialiased;
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply m-0 bg-canvas text-ink antialiased;
+    font-family: var(--sf-font, system-ui, sans-serif);
+  }
+  input[type="checkbox"] {
+    accent-color: var(--sf-primary);
+  }
+  :focus-visible {
+    outline: 2px solid var(--sf-primary);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .sf-eyebrow {
+    @apply text-[11px] font-medium uppercase tracking-label text-muted;
+  }
+  .sf-btn {
+    @apply inline-flex items-center justify-center rounded-theme bg-ink px-6 py-3 text-sm font-medium text-ink-on transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .sf-btn-ghost {
+    @apply inline-flex items-center justify-center rounded-theme border border-ink px-6 py-3 text-sm font-medium text-ink transition-colors hover:bg-ink hover:text-ink-on disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  [data-button-style="outline"] .sf-btn {
+    @apply border border-ink bg-transparent text-ink hover:bg-ink hover:text-ink-on;
+  }
+  .sf-input {
+    @apply w-full rounded-theme border border-line bg-canvas px-3 py-2.5 text-sm text-ink placeholder:text-faint;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
 }

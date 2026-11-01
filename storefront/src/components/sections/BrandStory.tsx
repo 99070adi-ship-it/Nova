@@ -1,17 +1,17 @@
-interface Props {
-  configuration: Record<string, unknown>;
-}
+import { ed } from "../../editor/ed";
+import { pick } from "../SectionRenderer";
+import { str } from "./common";
 
-export default function BrandStory({ configuration }: Props) {
-  const heading = configuration.heading as string | undefined;
-  const body = configuration.body as string | undefined;
-
+export default function BrandStory({ configuration: c }: { configuration: Record<string, unknown> }) {
+  const heading = str(c.heading);
+  const body = str(c.body);
   if (!heading && !body) return null;
-
+  const left = pick(c.align, ["left", "center"] as const, "center") === "left";
   return (
-    <section className="mx-auto max-w-2xl px-6 py-16 text-center">
-      {heading && <h2 className="text-2xl font-semibold">{heading}</h2>}
-      {body && <p className="mt-4 text-neutral-600">{body}</p>}
-    </section>
+    <div className={`mx-auto max-w-2xl px-5 ${left ? "text-left" : "text-center"}`}>
+      <p className="sf-eyebrow">Our story</p>
+      {heading && <h2 className="mt-3 text-3xl font-medium leading-tight tracking-tight" {...ed("brand_story.heading")}>{heading}</h2>}
+      {body && <p className="mt-5 text-lg leading-relaxed text-muted" {...ed("brand_story.body")}>{body}</p>}
+    </div>
   );
 }
