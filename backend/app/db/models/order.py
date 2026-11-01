@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import ENUM as PGEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -68,4 +68,18 @@ class CartEvent(Base, UUIDPKMixin):
     event: Mapped[CartEventType] = mapped_column(
         PGEnum(CartEventType, name="cart_event_type", values_callable=lambda e: [m.value for m in e]), nullable=False
     )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class CheckoutRequest(Base, UUIDPKMixin):
+    """One row per storefront checkout attempt that produced an order. The client-chosen idempotency key is
+    unique per store, so a double-click, a retry after a dropped response, or a replayed request returns the
+    SAME order instead of creating a second one."""
+
+    __tablename__ = "checkout_requests"
+    __table_args__ = (UniqueConstraint("org_id", "idempotency_key", name="uq_checkout_requests_org_id_key"),)
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

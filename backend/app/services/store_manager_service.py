@@ -14,6 +14,7 @@ from typing import Literal
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.json_output import parse_model_json
 from app.ai.factory import build_llm_provider
 from app.ai.reliability import guard_agent_run, safe_provider_step
 from app.db.models import AgentActionPlan, AgentRunStatus
@@ -149,7 +150,7 @@ async def _generate_missing_description(provider, product, brand_context: dict) 
     if step.final is None:
         return None
     try:
-        parsed = json.loads(step.final.text)
+        parsed = parse_model_json(step.final.text)
     except json.JSONDecodeError:
         return None
     return parsed.get("description") if isinstance(parsed, dict) else None

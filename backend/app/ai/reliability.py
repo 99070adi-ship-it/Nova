@@ -21,8 +21,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.provider import LLMProvider, ProviderStepResult, ToolResultMessage
 from app.db.models import AgentRunStatus, AIAgentRun
-from app.errors import AIProviderError
+import structlog
+
+from app.errors import AICredentialsError, AIProviderError, AIRateLimitedError
 from app.repositories import ai_repo
+
+
+log = structlog.get_logger()
 
 
 async def safe_provider_step(
@@ -42,7 +47,13 @@ async def safe_provider_step(
     except AIProviderError:
         raise
     except Exception as exc:  # the vendor SDK's own exception types, timeouts, network errors — anything
-        raise AIProviderError() from exc
+        # Only the KIND of failure is logged (never the message, which can echo request data or credentials).
+        log.warning("ai.provider_error", kind=type(exc).__name__, status=getattr(exc, "status_code", None))
+        if getattr(exc, "status_code", None) == 429 or type(exc).__name__ == "RateLimitError":
+            raise AIRateLimitedError() from None
+        if getattr(exc, "status_code", None) in (401, 403):
+            raise AICredentialsError() from None
+        raise AIProviderError() from None
 
 
 @asynccontextmanager

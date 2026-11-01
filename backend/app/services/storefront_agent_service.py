@@ -10,6 +10,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.json_output import parse_model_json
 from app.ai.factory import build_llm_provider
 from app.ai.reliability import guard_agent_run, safe_provider_step
 from app.db.models import AgentRunStatus, AIAgentRun
@@ -51,7 +52,7 @@ async def propose_change_plan(db: AsyncSession, org_id: uuid.UUID, *, instructio
         plan: list[dict] = []
         if step.final is not None:
             try:
-                parsed = json.loads(step.final.text)
+                parsed = parse_model_json(step.final.text)
                 if isinstance(parsed, list):
                     plan = parsed
             except json.JSONDecodeError:
@@ -70,7 +71,7 @@ async def apply_change_plan(db: AsyncSession, org_id: uuid.UUID, agent_run_id: u
     run = await ai_repo.get_agent_run(db, org_id, agent_run_id)
     if run is None or run.agent_key != "storefront_agent":
         raise NotFoundError("Storefront change plan not found")
-    if run.result_json is None or run.result_json.get("applied"):
+    if run.result_json is None or "plan" not in run.result_json or run.result_json.get("applied"):
         raise ConflictError("This change plan was already applied")
 
     draft = await storefront_service.get_or_create_draft(db, org_id)

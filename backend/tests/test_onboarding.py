@@ -262,119 +262,20 @@ async def test_nova_guide_is_a_real_agent_that_reads_real_progress(client, seede
     assert "Tell NOVA about your business" in body["assistant_text"]
 
 
-async def test_nova_guide_lesson_narration_prompts_bypass_the_generic_tool_call(client, seeded_owner):
-    # The NOVA 2.0 Guide redesign's demo/explain/complete narration calls (FirstProductLesson.tsx)
-    # send a fixed prompt per phase and must get phase-appropriate text back — not nova_guide's
-    # usual auto-triggered get_onboarding_progress tool call overriding every fresh message.
+async def test_the_demo_script_is_not_generated_by_the_backend(client, seeded_owner):
+    # The Guide's lesson copy is authored in ONE place (admin/src/lib/novaScript.ts). The fake provider used
+    # to carry a second, deterministic copy of the scripts keyed on prompt text; that conflicting duplicate
+    # is gone, so a lesson-style prompt now just takes nova_guide's normal read-only tool path.
     headers = await _auth_headers(client, seeded_owner)
-    start_res = await client.post(
-        "/api/v1/ai/conversations", json={"agent_key": "nova_guide", "context": {}}, headers=headers
-    )
-    conversation_id = start_res.json()["id"]
-
-    demo_res = await client.post(
-        f"/api/v1/ai/conversations/{conversation_id}/messages",
-        json={"text": "I'm about to demonstrate adding a product. Narrate what you're about to show me and why, in one or two sentences."},
+    start_res = await client.post("/api/v1/ai/conversations", json={"agent_key": "nova_guide", "context": {}}, headers=headers)
+    res = await client.post(
+        f"/api/v1/ai/conversations/{start_res.json()['id']}/messages",
+        json={"text": "I'm about to demonstrate adding a product. Narrate what you're about to show me and why."},
         headers=headers,
     )
-    assert demo_res.status_code == 200
-    assert demo_res.json()["tool_call_log"] == []
-    assert "Watch me first" in demo_res.json()["assistant_text"]
-
-    explain_res = await client.post(
-        f"/api/v1/ai/conversations/{conversation_id}/messages",
-        json={"text": "Explain briefly what you just showed me and why NOVA tracks known vs AI-suggested fields separately."},
-        headers=headers,
-    )
-    assert "actually know" in explain_res.json()["assistant_text"].lower()
-
-    complete_res = await client.post(
-        f"/api/v1/ai/conversations/{conversation_id}/messages",
-        json={"text": "The user just added their own product successfully. Congratulate them briefly and tell them what's next."},
-        headers=headers,
-    )
-    assert "Nicely done" in complete_res.json()["assistant_text"]
-
-
-async def test_nova_guide_lesson_narration_is_implemented_for_every_lesson_not_just_products(client, seeded_owner):
-    # Regression for the bug browser QA found: _synthesize_lesson_narration only ever recognized
-    # the "products" lesson's three prompts. Every other lesson's demo/explain/complete call fell
-    # through to the generic get_onboarding_progress tool-call path, which answers a completely
-    # different question than what the lesson actually asked — the Guide would demonstrate
-    # nothing and show no real explanation for 7 of the app's 8 onboarding lessons. Exact prompt
-    # text copied from admin/src/lib/novaLessons.ts; "products" itself is covered by
-    # test_nova_guide_lesson_narration_prompts_bypass_the_generic_tool_call above.
-    headers = await _auth_headers(client, seeded_owner)
-
-    lessons = [
-        (
-            "I'm about to demonstrate describing a brand. Narrate what you're about to show me and why, in one or two sentences.",
-            "Explain briefly what you just showed me and why NOVA needs this to generate a storefront that actually fits the brand.",
-            "The user just described their brand successfully. Congratulate them briefly and tell them what's next.",
-            "velora", "brand's identity", "brand identity is saved",
-        ),
-        (
-            "I'm about to show the user how to have NOVA generate content for their new product. Narrate it briefly.",
-            "Explain briefly what generating content does — NOVA writes a description and SEO copy, but price and SKU stay exactly as the owner typed them.",
-            "NOVA just generated content for the user's product. Congratulate them briefly and tell them what's next.",
-            "generate content", "price and sku", "generated real content",
-        ),
-        (
-            "I'm about to show the user how to review and accept NOVA's generated content. Narrate it briefly.",
-            "Explain briefly why the owner reviews and accepts AI-generated content before it becomes a real product.",
-            "The user just accepted their product. Congratulate them briefly and tell them what's next.",
-            "accept", "nothing becomes final", "real product in your catalog",
-        ),
-        (
-            "I'm about to show the user how to have NOVA generate their storefront. Narrate it briefly.",
-            "Explain briefly that NOVA is about to build a homepage from their brand and accepted products, and that they can still edit everything afterward.",
-            "NOVA just generated the user's storefront. Congratulate them briefly and tell them what's next.",
-            "generate storefront", "store builder", "storefront draft now exists",
-        ),
-        (
-            "I'm about to show the user how to ask NOVA to change their storefront in plain language. Narrate it briefly.",
-            "Explain briefly that NOVA proposes a change plan first — nothing customers see changes until the owner reviews it and explicitly applies it to the draft themselves. Tell them to press Propose, read what NOVA plans to change, then press Apply to draft once they're happy with it.",
-            "The user just reviewed and applied NOVA's proposed storefront change. Congratulate them briefly and tell them what's next.",
-            "propose", "apply to draft", "change is now on your draft",
-        ),
-        (
-            "I'm about to show the user how to publish their storefront live. Narrate it briefly.",
-            "Explain briefly that publishing is the one step that makes the draft visible to real customers.",
-            "The user just published their store. Congratulate them briefly and tell them what's next.",
-            "publish", "customers only ever see", "velora is live",
-        ),
-        (
-            "I'm about to show the user how NOVA checks on how their store is doing. Narrate it briefly.",
-            "Explain briefly that Store Manager delegates to Sales, Inventory, and Customer agents for a real read on the business, and that once results appear, 'Fix what you can' lets NOVA act on what it finds.",
-            "The user just saw NOVA analyze their business and act on it. Congratulate them warmly — this is the end of the tour — and tell them NOVA is always available from the chat bubble for anything else.",
-            "store manager", "fix what you can", "end of the guided tour",
-        ),
-    ]
-
-    for demo_prompt, explain_prompt, complete_prompt, demo_substr, explain_substr, complete_substr in lessons:
-        start_res = await client.post(
-            "/api/v1/ai/conversations", json={"agent_key": "nova_guide", "context": {}}, headers=headers
-        )
-        conversation_id = start_res.json()["id"]
-
-        demo_res = await client.post(
-            f"/api/v1/ai/conversations/{conversation_id}/messages", json={"text": demo_prompt}, headers=headers
-        )
-        assert demo_res.status_code == 200
-        assert demo_res.json()["tool_call_log"] == [], f"demo prompt fell through to a tool call: {demo_prompt!r}"
-        assert demo_substr in demo_res.json()["assistant_text"].lower(), demo_res.json()["assistant_text"]
-
-        explain_res = await client.post(
-            f"/api/v1/ai/conversations/{conversation_id}/messages", json={"text": explain_prompt}, headers=headers
-        )
-        assert explain_res.json()["tool_call_log"] == []
-        assert explain_substr in explain_res.json()["assistant_text"].lower(), explain_res.json()["assistant_text"]
-
-        complete_res = await client.post(
-            f"/api/v1/ai/conversations/{conversation_id}/messages", json={"text": complete_prompt}, headers=headers
-        )
-        assert complete_res.json()["tool_call_log"] == []
-        assert complete_substr in complete_res.json()["assistant_text"].lower(), complete_res.json()["assistant_text"]
+    assert res.status_code == 200
+    assert res.json()["tool_call_log"][0]["name"] == "get_onboarding_progress"
+    assert "Watch me first" not in res.json()["assistant_text"]
 
 
 async def test_nova_guide_is_not_delegatable_by_store_manager(client, seeded_owner):

@@ -14,8 +14,9 @@ from app.db.models.analytics import AnalyticsEvent, AnalyticsEventType, SalesMet
 from app.db.models.collection import Collection, CollectionProduct, CollectionProductCreatedBy
 from app.db.models.customer import Customer
 from app.db.models.inventory import Inventory, InventoryLocation, InventoryMovement
-from app.db.models.order import CartEvent, CartEventType, Order, OrderItem, OrderStatus, PaymentStatus
+from app.db.models.order import CartEvent, CheckoutRequest, CartEventType, Order, OrderItem, OrderStatus, PaymentStatus
 from app.db.models.organization import Organization
+from app.db.models.photo_studio import StudioImage, StudioImageKind
 from app.db.models.product import (
     Product,
     ProductDraft,
@@ -43,6 +44,7 @@ __all__ = [
     "AuditLog",
     "BrandProfile",
     "CartEvent",
+    "CheckoutRequest",
     "CartEventType",
     "Collection",
     "CollectionProduct",
@@ -70,6 +72,8 @@ __all__ = [
     "RiskClassification",
     "SalesMetricDaily",
     "Store",
+    "StudioImage",
+    "StudioImageKind",
     "StoreCreationSession",
     "StoreCreationStatus",
     "StorePage",

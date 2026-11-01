@@ -9,6 +9,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.json_output import parse_model_json
 from app.ai.factory import build_llm_provider
 from app.ai.reliability import guard_agent_run, safe_provider_step
 from app.db.models import AgentRunStatus, ProductDraft, ProductDraftStatus
@@ -53,7 +54,7 @@ async def generate_draft_content(db: AsyncSession, org_id: uuid.UUID, draft_id: 
         suggested: dict = {}
         if step.final is not None:
             try:
-                parsed = json.loads(step.final.text)
+                parsed = parse_model_json(step.final.text)
                 if isinstance(parsed, dict):
                     suggested = parsed
             except json.JSONDecodeError:

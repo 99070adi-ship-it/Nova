@@ -5,8 +5,11 @@ specialized or Store Manager — runs through this same bounded loop (ARCHITECTU
 Manager": "both loops have independent round-trip caps — bounded execution, structurally
 enforced")."""
 
+import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+
+from pydantic import ValidationError
 
 from app.ai.provider import LLMProvider, ProviderFinal, ToolCallRequest, ToolResultMessage
 from app.ai.reliability import safe_provider_step
@@ -40,6 +43,7 @@ async def run_agent(
     total_completion_tokens = 0
     tool_call_log: list[dict] = []
     available_tools = tool_schemas_for_model(tool_names)
+    proposed: dict[str, ToolResultMessage] = {}  # mutating calls already made this turn, by name + canonical arguments
 
     for _round in range(max_round_trips):
         step = await safe_provider_step(
@@ -64,10 +68,24 @@ async def run_agent(
             tool_call_log.append({"name": call.name, "arguments": call.arguments, "is_mutating": bool(spec and spec.is_mutating)})
             if spec is None or spec.name not in tool_names:
                 result = ToolResultMessage(tool_call_id=call.id, name=call.name, content={"error": "unknown_or_unauthorized_tool"})
-            elif spec.is_mutating:
-                result = await mutating_executor(call)
             else:
-                result = await read_only_executor(call)
+                # Model-written arguments are untrusted: they must satisfy the registered schema BEFORE anything runs.
+                try:
+                    spec.args_model.model_validate(call.arguments)
+                except ValidationError as exc:
+                    fields = sorted({".".join(str(p) for p in e["loc"]) or "arguments" for e in exc.errors()})
+                    result = ToolResultMessage(tool_call_id=call.id, name=call.name, content={"error": "invalid_arguments", "fields": fields})
+                    tool_results.append(result)
+                    continue
+                key = f"{call.name}:{json.dumps(call.arguments, sort_keys=True, default=str)}"
+                if spec.is_mutating and key in proposed:
+                    # The same mutation asked for twice in one turn is one proposal, not two.
+                    result = ToolResultMessage(tool_call_id=call.id, name=call.name, content={**proposed[key].content, "note": "duplicate_call_ignored"})
+                elif spec.is_mutating:
+                    result = await mutating_executor(call)
+                    proposed[key] = result
+                else:
+                    result = await read_only_executor(call)
             tool_results.append(result)
 
     return AgentLoopResult(

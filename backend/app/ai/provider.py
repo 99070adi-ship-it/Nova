@@ -33,6 +33,11 @@ class ToolResultMessage:
     content: dict
 
 
+class AssistantMessage(str):
+    """A prior assistant turn in `messages`. Plain `str` entries are user turns (the long-standing
+    contract); this subclass lets a provider keep roles straight so follow-ups read the real history."""
+
+
 class LLMProvider(ABC):
     """Application/domain code depends only on this interface, never on a specific vendor SDK
     (ARCHITECTURE.md "AI provider abstraction"). Domain-agnostic by design — `system_prompt` and

@@ -65,7 +65,7 @@ def _assert_safe_error(body: dict) -> None:
 async def test_conversation_message_provider_failure_is_safe_and_marks_run_failed(client, seeded_owner, monkeypatch):
     import app.services.agent_service as agent_service
 
-    monkeypatch.setattr(agent_service, "build_llm_provider", lambda: _ExplodingProvider())
+    monkeypatch.setattr(agent_service, "build_llm_provider", lambda *_a: _ExplodingProvider())
     headers = await _auth_headers(client, seeded_owner)
 
     start_res = await client.post("/api/v1/ai/conversations", json={"agent_key": "assistant", "context": {}}, headers=headers)
@@ -85,7 +85,7 @@ async def test_conversation_message_provider_failure_is_safe_and_marks_run_faile
 async def test_conversation_survives_provider_failure_and_recovers_on_retry(client, seeded_owner, monkeypatch):
     import app.services.agent_service as agent_service
 
-    monkeypatch.setattr(agent_service, "build_llm_provider", lambda: _ExplodingProvider())
+    monkeypatch.setattr(agent_service, "build_llm_provider", lambda *_a: _ExplodingProvider())
     headers = await _auth_headers(client, seeded_owner)
 
     start_res = await client.post("/api/v1/ai/conversations", json={"agent_key": "assistant", "context": {}}, headers=headers)
@@ -124,7 +124,7 @@ async def test_generate_draft_content_provider_failure_leaves_draft_untouched(cl
     draft_id = draft_res.json()["id"]
     fields_before = draft_res.json()["fields"]
 
-    monkeypatch.setattr(product_agent_service, "build_llm_provider", lambda: _ExplodingProvider())
+    monkeypatch.setattr(product_agent_service, "build_llm_provider", lambda *_a: _ExplodingProvider())
     generate_res = await client.post(f"/api/v1/store-creation/product-drafts/{draft_id}/generate", headers=headers)
     assert generate_res.status_code == 503
     _assert_safe_error(generate_res.json())
@@ -149,7 +149,7 @@ async def test_propose_change_plan_provider_failure_does_not_touch_draft(client,
     draft_before = await client.get("/api/v1/storefront/draft", headers=headers)
     sections_before = draft_before.json()["pages"][0]["sections"]
 
-    monkeypatch.setattr(storefront_agent_service, "build_llm_provider", lambda: _ExplodingProvider())
+    monkeypatch.setattr(storefront_agent_service, "build_llm_provider", lambda *_a: _ExplodingProvider())
     propose_res = await client.post(
         "/api/v1/storefront/change-plan", json={"instruction": "add a story about us"}, headers=headers
     )
@@ -167,7 +167,7 @@ async def test_propose_change_plan_provider_failure_does_not_touch_draft(client,
 async def test_store_health_provider_failure_is_safe_and_marks_run_failed(client, seeded_owner, monkeypatch):
     import app.services.store_manager_service as store_manager_service
 
-    monkeypatch.setattr(store_manager_service, "build_llm_provider", lambda: _ExplodingProvider())
+    monkeypatch.setattr(store_manager_service, "build_llm_provider", lambda *_a: _ExplodingProvider())
     headers = await _auth_headers(client, seeded_owner)
 
     res = await client.post("/api/v1/store-manager/health", headers=headers)

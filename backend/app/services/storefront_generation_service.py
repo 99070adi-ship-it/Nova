@@ -18,10 +18,12 @@ import uuid
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.json_output import parse_model_json
 from app.ai.factory import build_llm_provider
+from app.ai.fake_provider import FakeLLMProvider
 from app.ai.reliability import guard_agent_run, safe_provider_step
 from app.db.models import AgentRunStatus, GeneratedBy, StorefrontVersion, StorefrontVersionStatus
-from app.errors import ValidationDomainError
+from app.errors import AIProviderError, ValidationDomainError
 from app.repositories import ai_repo, collection_repo, product_repo, store_creation_repo, storefront_repo
 from app.services.storefront_service import DEFAULT_THEME_TOKENS
 
@@ -32,7 +34,8 @@ STOREFRONT_GENERATION_SYSTEM_PROMPT = (
     "(bool), brand_story {heading, body} (omit or null if include_brand_story is false), "
     "product_grid {title, collection_id, limit}, theme {primary_color, border_radius, "
     "font_family}. collection_id must be one of the ids given in context.collections, or null — "
-    "never invent one. Write real, considered copy grounded in the brand's actual "
+    "never invent one. hero.cta_href must be one of: /products, /cart, or /collections/<slug> using a "
+    "slug from context.collections. Write real, considered copy grounded in the brand's actual "
     "name/description/vibe/positioning — never invent a product fact that wasn't supplied, and "
     "never reference a product or collection that isn't in context."
 )
@@ -49,7 +52,7 @@ class _HeroPlan(BaseModel):
     headline: str
     subheadline: str = ""
     cta_text: str = "Shop now"
-    cta_href: str = "/shop"
+    cta_href: str = "/products"
 
 
 class _BrandStoryPlan(BaseModel):
@@ -95,7 +98,27 @@ def _fallback_plan(brand) -> StorefrontGenerationPlan:
     )
 
 
-def _build_pages(plan: StorefrontGenerationPlan, known_collection_ids: set[str]) -> list[dict]:
+_INTERNAL_HREFS = {"/", "/products", "/cart", "/wishlist"}
+
+
+def _safe_href(href: str | None, collection_slugs: dict[str, str]) -> str:
+    """The storefront only has /products, /collections/<slug> and /pages/<slug>. A model (or an old default) may say /shop, or
+    link a collection by its id: map what can be mapped, and send anything else to the shop rather than to a 404 page."""
+    href = (href or "").strip()
+    if href in _INTERNAL_HREFS:
+        return href
+    parts = href.strip("/").split("/")
+    if len(parts) == 2 and parts[0] == "collections":
+        if parts[1] in collection_slugs:
+            return f"/collections/{collection_slugs[parts[1]]}"
+        if parts[1] in collection_slugs.values():
+            return f"/collections/{parts[1]}"
+    return "/products"
+
+
+def _build_pages(plan: StorefrontGenerationPlan, collection_slugs: dict[str, str]) -> list[dict]:
+    known_collection_ids = set(collection_slugs)
+    plan.hero.cta_href = _safe_href(plan.hero.cta_href, collection_slugs)
     sections = [{"type": "hero", "order": 0, "configuration": plan.hero.model_dump()}]
 
     if plan.include_brand_story and plan.brand_story is not None:
@@ -129,7 +152,7 @@ async def generate(db: AsyncSession, org_id: uuid.UUID) -> StorefrontVersion:
 
     products = await product_repo.list_published_products(db, org_id)
     collections = await collection_repo.list_collections(db, org_id)
-    known_collection_ids = {str(c.id) for c in collections}
+    collection_slugs = {str(c.id): c.slug for c in collections}
 
     context = {
         "kind": "storefront_generation",
@@ -139,7 +162,7 @@ async def generate(db: AsyncSession, org_id: uuid.UUID) -> StorefrontVersion:
             "preferred_colors": brand.preferred_colors, "typography_preference": brand.typography_preference,
         },
         "products": [{"title": p.title, "category": p.category} for p in products[:20]],
-        "collections": [{"id": str(c.id), "title": c.title} for c in collections],
+        "collections": [{"id": str(c.id), "slug": c.slug, "title": c.title} for c in collections],
     }
 
     run = await ai_repo.create_agent_run(db, org_id, agent_key="storefront_generation", trigger="generate_storefront")
@@ -148,21 +171,31 @@ async def generate(db: AsyncSession, org_id: uuid.UUID) -> StorefrontVersion:
         # Nothing below runs if this raises — a provider failure leaves the existing draft (if
         # any) completely untouched and creates no StorefrontVersion row at all, never a
         # misleadingly-labeled `generated_by=ai` result.
-        step = await safe_provider_step(
-            provider, system_prompt=STOREFRONT_GENERATION_SYSTEM_PROMPT, context=context, messages=[],
-            tool_results=[], available_tools=[],
-        )
-
-        try:
-            raw = json.loads(step.final.text) if step.final is not None else {}
-            plan = StorefrontGenerationPlan.model_validate(raw)
-        except (json.JSONDecodeError, ValidationError):
+        # A real model occasionally returns malformed JSON. Retry once, then FAIL visibly: a canned template must never be
+        # saved as `generated_by=ai`. Only the deterministic test double keeps the template fallback.
+        attempts = 1 if isinstance(provider, FakeLLMProvider) else 2
+        plan = None
+        step = None
+        for _ in range(attempts):
+            step = await safe_provider_step(
+                provider, system_prompt=STOREFRONT_GENERATION_SYSTEM_PROMPT, context=context, messages=[],
+                tool_results=[], available_tools=[],
+            )
+            try:
+                raw = parse_model_json(step.final.text) if step.final is not None else {}
+                plan = StorefrontGenerationPlan.model_validate(raw)
+                break
+            except (json.JSONDecodeError, ValidationError):
+                continue
+        if plan is None:
+            if attempts > 1:
+                raise AIProviderError()
             plan = _fallback_plan(brand)
 
         await storefront_repo.delete_draft(db, org_id)
         draft = await storefront_repo.create_version(
             db, org_id, status=StorefrontVersionStatus.draft, generated_by=GeneratedBy.ai,
-            pages=_build_pages(plan, known_collection_ids), theme_tokens=_build_theme(plan.theme),
+            pages=_build_pages(plan, collection_slugs), theme_tokens=_build_theme(plan.theme),
         )
         await ai_repo.complete_agent_run(
             db, run, status=AgentRunStatus.completed, prompt_tokens=step.prompt_tokens,

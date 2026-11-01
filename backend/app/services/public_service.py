@@ -1,11 +1,16 @@
 import uuid
+from collections.abc import Callable
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import utcnow
-from app.db.models import Organization, Product, StorefrontVersion, StorefrontVersionStatus
+from app.config import get_settings
+from app.db.models import Inventory, Organization, Product, ProductImage, StorefrontVersion, StorefrontVersionStatus
+from app.schemas.public import PublicImage, PublicProduct, PublicVariant
 from app.errors import NotFoundError
 from app.repositories import collection_repo, product_repo, storefront_repo
+from app.services.checkout_service import available_of
 
 
 async def get_org_by_slug_or_404(db: AsyncSession, org_slug: str) -> Organization:
@@ -75,3 +80,52 @@ async def record_preview_loaded(db: AsyncSession, version_id: uuid.UUID) -> bool
     recorded = await storefront_repo.mark_preview_loaded(db, version.id, at=utcnow())
     await db.commit()
     return recorded
+
+
+def absolute_url_builder(base_url: str) -> Callable[[str | None], str | None]:
+    """Images are stored as site-relative paths (e.g. /static/velora/tote.svg) or full https URLs. The public API
+    always returns absolute URLs, so a storefront on another origin can load them."""
+    base = (get_settings().public_base_url or base_url).rstrip("/")
+
+    def absolute(url: str | None) -> str | None:
+        if not url:
+            return None
+        return url if url.startswith(("http://", "https://")) else f"{base}/{url.lstrip('/')}"
+
+    return absolute
+
+
+async def build_public_products(db: AsyncSession, org_id: uuid.UUID, products: list[Product], absolute) -> list[PublicProduct]:
+    """Published products with their images and REAL stock, in three queries (no per-product lookups)."""
+    if not products:
+        return []
+    product_ids = [p.id for p in products]
+    variant_ids = [v.id for p in products for v in p.variants]
+    image_rows = (await db.execute(select(ProductImage).where(ProductImage.product_id.in_(product_ids)).order_by(ProductImage.created_at))).scalars().all()
+    inventory_rows = (await db.execute(select(Inventory).where(Inventory.variant_id.in_(variant_ids)))).scalars().all() if variant_ids else []
+    images: dict[uuid.UUID, list[ProductImage]] = {}
+    for img in image_rows:
+        images.setdefault(img.product_id, []).append(img)
+    stock: dict[uuid.UUID, list[Inventory]] = {}
+    for inv in inventory_rows:
+        stock.setdefault(inv.variant_id, []).append(inv)
+
+    out: list[PublicProduct] = []
+    for p in products:
+        ordered = sorted(images.get(p.id, []), key=lambda i: (0 if i.role.value == "canonical" else 1))
+        variants = []
+        for v in sorted(p.variants, key=lambda v: v.sku):
+            rows = stock.get(v.id, [])
+            avail = available_of(rows)
+            threshold = sum(r.low_stock_threshold for r in rows)
+            variants.append(PublicVariant(
+                id=v.id, sku=v.sku, price=float(v.price), attributes=v.attributes, available=avail, in_stock=avail > 0,
+                low_stock=0 < avail <= threshold,
+            ))
+        out.append(PublicProduct(
+            id=p.id, title=p.title, slug=p.slug, category=p.category, description=p.description, seo_title=p.seo_title,
+            seo_description=p.seo_description, tags=[t for t in (p.tags or []) if isinstance(t, str)],
+            images=[PublicImage(url=absolute(i.url), alt_text=i.alt_text) for i in ordered if absolute(i.url)],
+            variants=variants,
+        ))
+    return out

@@ -138,7 +138,7 @@ async def test_new_demo_workspace_has_a_live_baseline_served_by_the_real_public_
     assert res.status_code == 200
     body = res.json()
     types = [s["type"] for s in body["pages"][0]["sections"]]
-    assert types == ["hero", "product_grid", "brand_story"]
+    assert types == ["hero", "collection_grid", "product_grid", "feature_banner", "brand_story"]
     assert body["pages"][0]["sections"][0]["configuration"]["headline"] == "Quiet leather, made to last."
     assert body["theme"]["primary_color"] == "#2A1D15"
     products = (await client.get(f"/api/v1/public/stores/{slug}/products")).json()
@@ -163,7 +163,7 @@ async def test_baseline_stays_live_while_the_draft_is_edited_then_publish_replac
     # A draft starts as an editable copy of what's live — not a blank default.
     draft = (await client.get("/api/v1/storefront/draft", headers=headers)).json()
     assert draft["status"] == "draft"
-    assert [s["type"] for s in draft["pages"][0]["sections"]] == ["hero", "product_grid", "brand_story"]
+    assert [s["type"] for s in draft["pages"][0]["sections"]] == ["hero", "collection_grid", "product_grid", "feature_banner", "brand_story"]
     hero = draft["pages"][0]["sections"][0]
     await client.patch(
         f"/api/v1/storefront/sections/{hero['id']}",

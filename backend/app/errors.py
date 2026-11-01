@@ -39,6 +39,16 @@ class ForbiddenError(DomainError):
     code = "forbidden"
 
 
+class RateLimitedError(DomainError):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    code = "rate_limited"
+
+
+class UnavailableError(DomainError):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    code = "unavailable"
+
+
 class StaleProposalError(DomainError):
     status_code = status.HTTP_409_CONFLICT
     code = "stale_proposal"
@@ -62,6 +72,63 @@ class AIProviderError(DomainError):
             "Your store data and existing changes are safe.",
             details=details,
         )
+
+
+class AIProviderNotConfiguredError(AIProviderError):
+    """A real AI provider is selected but has no credentials. Visible and actionable; never replaced by the fake provider."""
+
+    code = "ai_not_configured"
+
+    def __init__(self, details: dict | None = None):
+        super().__init__(details)
+        self.message = (
+            "NOVA's AI isn't set up on this server yet. An administrator needs to add the AI provider's API key "
+            "(NVIDIA_API_KEY) and restart the backend. Nothing was changed."
+        )
+
+
+class AICredentialsError(AIProviderError):
+    """The provider rejected the server's credentials (invalid, expired or revoked key, or no access to the model)."""
+
+    code = "ai_credentials_invalid"
+
+    def __init__(self, details: dict | None = None):
+        super().__init__(details)
+        self.message = (
+            "The AI service rejected this server's credentials. An administrator needs to check the API key and model access "
+            "and restart the backend. Nothing was changed."
+        )
+
+
+class AIRateLimitedError(AIProviderError):
+    """The AI service is rate limiting us. Same safe, vendor-free envelope as AIProviderError, with its own code so a client
+    can say "busy, try again shortly"; nothing is retried or claimed done."""
+
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    code = "ai_rate_limited"
+
+    def __init__(self, details: dict | None = None):
+        super().__init__(details)
+        self.message = "NOVA's AI service is busy right now. Nothing was changed. Please try again in a moment."
+
+
+class SpeechUnavailableError(DomainError):
+    """Text-to-speech cannot be produced right now (no credentials, provider down, timeout). Carries no
+    vendor detail. The Guide treats it as "carry on in text", never as a failure of the user's task."""
+
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    code = "speech_unavailable"
+
+    def __init__(self, message: str = "Voice isn't available right now."):
+        super().__init__(message)
+
+
+class SpeechRateLimitedError(DomainError):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    code = "speech_rate_limited"
+
+    def __init__(self, message: str = "Too many voice requests. Try again in a moment."):
+        super().__init__(message)
 
 
 def _envelope(code: str, message: str, details: dict | None = None) -> dict:

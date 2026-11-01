@@ -5,8 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import AuthContext, require_any_role
 from app.db.session import get_db
-from app.schemas.storefront import ChangePlanOut, ChangePlanRequest, DiffOut, SectionCreate, SectionUpdate, StorefrontVersionOut, ThemeUpdate
-from app.services import storefront_agent_service, storefront_service
+from app.schemas.storefront import (
+    ChangePlanOut, ChangePlanRequest, DiffOut, EditableElementsOut, ElementEditApplyIn, ElementEditProposalOut, ElementEditProposeIn,
+    SectionCreate, SectionUpdate, StorefrontVersionOut, ThemeUpdate,
+)
+from app.services import storefront_agent_service, storefront_element_service, storefront_registry, storefront_service
 
 router = APIRouter()
 
@@ -88,3 +91,37 @@ async def apply_change_plan(
 ) -> StorefrontVersionOut:
     draft = await storefront_agent_service.apply_change_plan(db, ctx.org_id, agent_run_id)
     return StorefrontVersionOut.from_version(draft)
+
+
+# ---- click-to-edit (Store Builder's visual editor) ----
+
+@router.get("/editable-elements", response_model=EditableElementsOut)
+async def editable_elements(ctx: AuthContext = Depends(require_any_role)) -> EditableElementsOut:
+    """What the visual editor may touch: the one registry the preview, the proposal validator and the outline all use."""
+    return EditableElementsOut(**storefront_registry.public_registry())
+
+
+@router.post("/element-edit/propose", response_model=ElementEditProposalOut, status_code=201)
+async def propose_element_edit(
+    payload: ElementEditProposeIn, ctx: AuthContext = Depends(require_any_role), db: AsyncSession = Depends(get_db)
+) -> ElementEditProposalOut:
+    result = await storefront_element_service.propose(
+        db, ctx.org_id, ctx.user_id, draft_id=payload.draft_id, revision=payload.revision, section_id=payload.section_id,
+        element=payload.element, instruction=payload.instruction,
+    )
+    return ElementEditProposalOut(**result)
+
+
+@router.post("/element-edit/{proposal_id}/apply", response_model=StorefrontVersionOut)
+async def apply_element_edit(
+    proposal_id: uuid.UUID, payload: ElementEditApplyIn, ctx: AuthContext = Depends(require_any_role), db: AsyncSession = Depends(get_db)
+) -> StorefrontVersionOut:
+    draft = await storefront_element_service.apply(db, ctx.org_id, ctx.user_id, proposal_id, revision=payload.revision)
+    return StorefrontVersionOut.from_version(draft)
+
+
+@router.post("/element-edit/{proposal_id}/discard", response_model=ElementEditProposalOut)
+async def discard_element_edit(
+    proposal_id: uuid.UUID, ctx: AuthContext = Depends(require_any_role), db: AsyncSession = Depends(get_db)
+) -> ElementEditProposalOut:
+    return ElementEditProposalOut(**await storefront_element_service.discard(db, ctx.org_id, proposal_id))

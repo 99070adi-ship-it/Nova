@@ -38,8 +38,11 @@ from app.db.models import (
     GeneratedBy,
     Inventory,
     InventoryLocation,
+    InventoryMovement,
     Order,
     OrderItem,
+    ProductImage,
+    ProductImageRole,
     OrderStatus,
     Organization,
     PaymentStatus,
@@ -58,53 +61,9 @@ from app.services import product_agent_service, store_creation_service
 
 random.seed(42)
 
-# (title, price, problem) — problem is one of: low_stock, dead_stock, low_conversion, declining, None
-CATALOG: dict[str, list[tuple[str, float, str | None]]] = {
-    "Signature Totes": [
-        ("Structured Tote", 320, "low_stock"),
-        ("Weekender Tote", 280, None),
-        ("Canvas Everyday Tote", 140, None),
-        ("Mini Structured Tote", 260, None),
-        ("Oversized Shopper Tote", 240, "low_conversion"),
-        ("Woven Straw Tote", 180, "dead_stock"),
-    ],
-    "Everyday Crossbody": [
-        ("City Crossbody", 220, "low_stock"),
-        ("Mini Crossbody", 180, None),
-        ("Saddle Crossbody", 260, None),
-        ("Quilted Crossbody", 300, None),
-        ("Convertible Crossbody", 240, "low_conversion"),
-        ("Belt Bag Crossbody", 160, None),
-    ],
-    "Evening Clutches": [
-        ("Satin Evening Clutch", 190, "declining"),
-        ("Beaded Clutch", 220, "declining"),
-        ("Envelope Clutch", 150, "declining"),
-        ("Velvet Clutch", 170, "declining"),
-        ("Crystal-Embellished Clutch", 260, "low_conversion"),
-    ],
-    "Wallets & Cardholders": [
-        ("Bifold Wallet", 95, "low_stock"),
-        ("Zip-Around Wallet", 110, None),
-        ("Cardholder", 60, None),
-        ("Coin Pouch", 40, "dead_stock"),
-        ("Passport Holder", 85, None),
-    ],
-    "Belts & Accessories": [
-        ("Leather Belt", 90, None),
-        ("Reversible Belt", 100, None),
-        ("Silk Scarf", 75, None),
-        ("Keychain Charm", 35, "dead_stock"),
-    ],
-}
-
-MATERIALS = {
-    "Signature Totes": "full-grain leather",
-    "Everyday Crossbody": "pebbled leather",
-    "Evening Clutches": "silk satin",
-    "Wallets & Cardholders": "pebbled leather",
-    "Belts & Accessories": "vegetable-tanned leather",
-}
+from app.services.demo_catalog import (  # noqa: E402  (the catalog data itself lives with the rest of VELORA's content)
+    CATALOG, COLLECTION_DESCRIPTIONS, MATERIALS, PRODUCT_COPY, colorways_for, product_slug,
+)
 
 CUSTOMERS = [
     ("Ava Bennett", "ava.bennett@example.com"),
@@ -138,9 +97,17 @@ VELORA_BASELINE_PAGES = [
                 "headline": "Quiet leather, made to last.",
                 "subheadline": "Handbags, wallets and leather accessories for people who buy once and carry for years.",
                 "cta_text": "Shop the collection", "cta_href": "/products",
+                "image_url": "/static/velora/hero.svg",
             }},
-            {"type": "product_grid", "order": 1, "configuration": {"title": "The edit", "collection_id": None, "limit": 8}},
-            {"type": "brand_story", "order": 2, "configuration": {
+            {"type": "collection_grid", "order": 1, "configuration": {"title": "Shop by collection", "limit": 5}},
+            {"type": "product_grid", "order": 2, "configuration": {"title": "The edit", "collection_id": None, "limit": 8}},
+            {"type": "feature_banner", "order": 3, "configuration": {
+                "eyebrow": "Evening Clutches",
+                "heading": "Small bags for the evenings worth dressing for.",
+                "body": "Silk satin, velvet and a little sparkle, all in a shape that slips into the smallest plans.",
+                "cta_text": "See the clutches", "cta_href": "/collections/evening-clutches",
+            }},
+            {"type": "brand_story", "order": 4, "configuration": {
                 "heading": "Made slowly, worn for years.",
                 "body": (
                     "Velora designs considered leather goods in warm neutrals and soft structure. Every piece is cut "
@@ -148,7 +115,20 @@ VELORA_BASELINE_PAGES = [
                 ),
             }},
         ],
-    }
+    },
+    {
+        "slug": "about", "title": "Our story", "order": 1,
+        "sections": [
+            {"type": "brand_story", "order": 0, "configuration": {
+                "heading": "Quiet luxury, without the noise.",
+                "body": (
+                    "Velora began with a simple idea: a good bag should get better with time. We favor warm neutrals, soft "
+                    "structure and honest materials, and we make fewer things so each one can be made well."
+                ),
+            }},
+            {"type": "product_grid", "order": 1, "configuration": {"title": "Where to start", "collection_id": None, "limit": 4}},
+        ],
+    },
 ]
 VELORA_BASELINE_THEME = {
     "primary_color": "#2A1D15",
@@ -159,13 +139,26 @@ VELORA_BASELINE_THEME = {
 
 
 def _slug(title: str) -> str:
-    return title.lower().replace(" ", "-").replace("&", "and")
+    return product_slug(title)
 
 
 def _copy(title: str, collection_title: str) -> tuple[str, str, str]:
-    material = MATERIALS[collection_title]
-    description = f"{title} crafted from {material}, designed for effortless everyday elegance."
-    return description, f"{title} | Velora", description[:160]
+    description = PRODUCT_COPY.get(title) or f"{title} in {MATERIALS[collection_title]}, designed for everyday elegance."
+    seo_description = description if len(description) <= 160 else description[:157].rsplit(" ", 1)[0] + "..."
+    return description, f"{title} | Velora", seo_description
+
+
+def _baseline_pages(collections: dict) -> list[dict]:
+    """The baseline homepage, with its featured grid pointing at the Signature Totes collection that was just created."""
+    import copy
+
+    pages = copy.deepcopy(VELORA_BASELINE_PAGES)
+    featured = collections.get("Signature Totes")
+    for section in pages[0]["sections"]:
+        if section["type"] == "product_grid" and featured is not None:
+            section["configuration"]["collection_id"] = str(featured.id)
+            section["configuration"]["title"] = "The signature edit"
+    return pages
 
 
 async def _seed_velora_catalog(*, org_slug: str, login_email: str, login_password: str = "changeme123") -> dict:
@@ -206,7 +199,7 @@ async def _seed_velora_catalog(*, org_slug: str, login_email: str, login_passwor
 
         collections: dict[str, Collection] = {}
         for title in CATALOG:
-            collection = Collection(org_id=org.id, title=title, slug=_slug(title), description=f"The {title} edit.")
+            collection = Collection(org_id=org.id, title=title, slug=_slug(title), description=COLLECTION_DESCRIPTIONS.get(title) or f"The {title} edit.")
             db.add(collection)
             collections[title] = collection
         await db.flush()
@@ -214,24 +207,43 @@ async def _seed_velora_catalog(*, org_slug: str, login_email: str, login_passwor
         products_by_problem: dict[str, list[tuple[Product, ProductVariant]]] = {"low_stock": [], "dead_stock": [], "low_conversion": [], "declining": []}
         all_variants: list[tuple[Product, ProductVariant, str, str | None]] = []  # (product, variant, collection_title, problem)
 
+        sku_counter = 0
+        inventories: dict = {}  # variant id -> its Inventory row
+        sold: dict = {}  # variant id -> units sold in the seeded order history
         for collection_title, items in CATALOG.items():
             for title, price, problem in items:
                 description, seo_title, seo_description = _copy(title, collection_title)
                 product = Product(
                     org_id=org.id, title=title, slug=_slug(title), status=ProductStatus.published,
-                    category=collection_title, tags=[collection_title.split()[0].lower()],
+                    category=collection_title, tags=[collection_title.split()[0].lower(), MATERIALS[collection_title].split()[-1]],
                     description=description, seo_title=seo_title, seo_description=seo_description,
                 )
                 db.add(product)
                 await db.flush()
 
-                sku = f"{''.join(w[0] for w in title.split())}-{uuid.uuid4().hex[:4].upper()}"
-                variant = ProductVariant(org_id=org.id, product_id=product.id, sku=sku, price=price, cost=round(price * 0.4, 2))
-                db.add(variant)
-                await db.flush()
-
-                on_hand = {"low_stock": 2, "dead_stock": 90}.get(problem, 25)
-                db.add(Inventory(variant_id=variant.id, location_id=location.id, on_hand=on_hand, low_stock_threshold=5))
+                # The first colorway is the one in the product photo and the one the seeded business problem
+                # (stock, orders) is about; other colorways are plain, well-stocked variants of the same product.
+                colorways = colorways_for(collection_title, title, problem)
+                sku_counter += 1
+                variant = None
+                for index, color in enumerate(colorways):
+                    sku = f"VEL-{sku_counter:03d}-{color[:3].upper()}"
+                    v = ProductVariant(
+                        org_id=org.id, product_id=product.id, sku=sku, price=price, cost=round(price * 0.4, 2),
+                        attributes={"color": color, "material": MATERIALS[collection_title]},
+                    )
+                    db.add(v)
+                    await db.flush()
+                    on_hand = {"low_stock": 2, "dead_stock": 90}.get(problem, 25) if index == 0 else 14
+                    inv = Inventory(variant_id=v.id, location_id=location.id, on_hand=on_hand, low_stock_threshold=5)
+                    db.add(inv)
+                    inventories[v.id] = inv
+                    if index == 0:
+                        variant = v
+                db.add(ProductImage(
+                    product_id=product.id, url=f"/static/velora/{_slug(title)}.svg", role=ProductImageRole.canonical,
+                    alt_text=f"{title} in {colorways[0]}", is_ai_generated=False, provider="velora-illustration",
+                ))
                 db.add(CollectionProduct(collection_id=collections[collection_title].id, product_id=product.id))
 
                 if problem in products_by_problem:
@@ -266,6 +278,7 @@ async def _seed_velora_catalog(*, org_slug: str, login_email: str, login_passwor
                 db.add(order)
                 await db.flush()
                 db.add(OrderItem(order_id=order.id, variant_id=variant.id, quantity=quantity, unit_price=unit_price))
+                sold[variant.id] = sold.get(variant.id, 0) + quantity
                 db.add(AnalyticsEvent(
                     org_id=org.id, event_type=AnalyticsEventType.purchase, product_id=product.id,
                     customer_id=customer.id, created_at=created_at,
@@ -296,10 +309,20 @@ async def _seed_velora_catalog(*, org_slug: str, login_email: str, login_passwor
             db.add(order)
             await db.flush()
             db.add(OrderItem(order_id=order.id, variant_id=variant.id, quantity=1, unit_price=unit_price))
+            sold[variant.id] = sold.get(variant.id, 0) + 1
             db.add(AnalyticsEvent(
                 org_id=org.id, event_type=AnalyticsEventType.purchase, product_id=product.id,
                 customer_id=customer.id, created_at=created_at,
             ))
+
+        # ---- Stock ledger: every variant's on-hand is the sum of its movements. Opening stock came in 90 days
+        # ago and the seeded order history took units out, so the ledger reconciles with inventory and sales.
+        await db.flush()
+        for variant_id, inv in inventories.items():
+            units_sold = sold.get(variant_id, 0)
+            db.add(InventoryMovement(inventory_id=inv.id, delta=inv.on_hand + units_sold, reason="Opening stock", created_at=utcnow() - timedelta(days=90)))
+            if units_sold:
+                db.add(InventoryMovement(inventory_id=inv.id, delta=-units_sold, reason="Sales to date", created_at=utcnow() - timedelta(days=1)))
 
         # ---- Abandoned carts.
         for _ in range(6):
@@ -325,7 +348,7 @@ async def _seed_velora_catalog(*, org_slug: str, login_email: str, login_passwor
 
         await storefront_repo.create_version(
             db, org.id, status=StorefrontVersionStatus.live, generated_by=GeneratedBy.owner,
-            pages=VELORA_BASELINE_PAGES, theme_tokens=VELORA_BASELINE_THEME, published_at=utcnow(),
+            pages=_baseline_pages(collections), theme_tokens=VELORA_BASELINE_THEME, published_at=utcnow(),
             is_seed_baseline=True,
         )
 

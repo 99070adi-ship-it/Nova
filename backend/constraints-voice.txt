@@ -1,0 +1,14 @@
+# Exact versions the voice feature was tested with (pip install -e '.[voice]' -c constraints-voice.txt).
+# Also needed once: python -m spacy download en_core_web_sm  (misaki installs it itself on first use if missing)
+espeakng-loader==0.2.4
+huggingface_hub==2.2.0
+kokoro==0.9.4
+loguru==0.7.3
+misaki==0.9.4
+numpy==2.5.3
+phonemizer-fork==3.3.2
+safetensors==0.8.0
+spacy==3.8.16
+tokenizers==0.23.3
+torch==2.14.1
+transformers==5.19.0

@@ -22,12 +22,20 @@ class ConversationOut(BaseModel):
 
 class PostMessage(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
+    # The admin screen the merchant is on (e.g. "products"). Validated against an allowlist server-side;
+    # anything else is ignored. Lets the assistant be relevant without trusting free-form client context.
+    screen: str | None = Field(default=None, max_length=40)
+    # What is selected/open on that screen ({"product": ..., "section": ..., "step": ...}); only those keys are used, truncated.
+    focus: dict[str, str] | None = Field(default=None, max_length=5)
 
 
 class PostMessageResult(BaseModel):
     assistant_text: str
     hit_loop_cap: bool
     tool_call_log: list[dict]
+    # How the assistant routed the message (small_talk, product_help, business_query, action_request,
+    # troubleshooting, ambiguous); null for agents that do not route.
+    intent: str | None = None
 
 
 class MessageOut(BaseModel):
@@ -104,3 +112,10 @@ class AuditLogOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class SpeechRequest(BaseModel):
+    """The words to speak: the same narration the Guide shows. Length-bounded (config tts_max_chars is
+    enforced again in the route) so one request cannot become an expensive audio job."""
+
+    text: str = Field(min_length=1, max_length=4000)

@@ -67,7 +67,7 @@ async def test_generate_provider_failure_creates_no_draft_and_fails_run_closed(c
     draft_before = await client.get("/api/v1/storefront/draft", headers=headers)
     assert draft_before.json()["generated_by"] != "ai"  # the bare owner-default draft, not AI
 
-    monkeypatch.setattr(storefront_generation_service, "build_llm_provider", lambda: _ExplodingProvider())
+    monkeypatch.setattr(storefront_generation_service, "build_llm_provider", lambda *_a: _ExplodingProvider())
     res = await client.post("/api/v1/store-creation/generate-storefront", headers=headers)
     assert res.status_code == 503
     _assert_safe_error(res.json())
@@ -109,7 +109,7 @@ async def test_generate_malformed_structured_output_falls_back_safely(client, se
     await client.put("/api/v1/store-creation/brand-input", json={"name": "Malformed Co"}, headers=headers)
 
     broken_provider = FakeLLMProvider(script=[ProviderStepResult(final=ProviderFinal(text="not json at all"))])
-    monkeypatch.setattr(storefront_generation_service, "build_llm_provider", lambda: broken_provider)
+    monkeypatch.setattr(storefront_generation_service, "build_llm_provider", lambda *_a: broken_provider)
 
     res = await client.post("/api/v1/store-creation/generate-storefront", headers=headers)
     assert res.status_code == 200
@@ -229,3 +229,14 @@ async def test_change_plan_with_no_matching_keywords_is_a_no_op(client, seeded_o
 
     propose_res = await client.post("/api/v1/storefront/change-plan", json={"instruction": "xyzzy plugh"}, headers=headers)
     assert propose_res.json()["plan"][0]["action"] == "none"
+
+
+def test_hero_links_are_mapped_to_real_storefront_routes():
+    from app.services.storefront_generation_service import _safe_href
+
+    slugs = {"3f1c-id": "candles"}
+    assert _safe_href("/collections/3f1c-id", slugs) == "/collections/candles"  # a model linking by id
+    assert _safe_href("/collections/candles", slugs) == "/collections/candles"
+    assert _safe_href("/collections/made-up", slugs) == "/products"
+    assert _safe_href("/products", slugs) == "/products" and _safe_href("/cart", slugs) == "/cart"
+    assert _safe_href("javascript:alert(1)", slugs) == "/products" and _safe_href(None, slugs) == "/products"
