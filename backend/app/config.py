@@ -11,6 +11,21 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
 
+def _asyncpg_query(url: str) -> str:
+    """Providers such as Neon append libpq options (`sslmode=require`, `channel_binding=require`) that asyncpg does not accept.
+    asyncpg spells TLS as `ssl=<mode>` and has no channel_binding option, so translate the first and drop the second."""
+    base, sep, query = url.partition("?")
+    if not sep:
+        return url
+    kept: list[str] = []
+    for part in query.split("&"):
+        key, _, value = part.partition("=")
+        if key == "channel_binding":
+            continue
+        kept.append(f"ssl={value}" if key == "sslmode" else part)
+    return base + ("?" + "&".join(kept) if kept else "")
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ENV_FILE, env_file_encoding="utf-8", extra="ignore")
 
@@ -23,10 +38,10 @@ class Settings(BaseSettings):
         # Managed Postgres providers hand out DATABASE_URL as postgres:// or postgresql://
         # (psycopg2-style, no driver suffix). This project only installs asyncpg.
         if v.startswith("postgres://"):
-            return "postgresql+asyncpg://" + v[len("postgres://") :]
-        if v.startswith("postgresql://"):
-            return "postgresql+asyncpg://" + v[len("postgresql://") :]
-        return v
+            v = "postgresql+asyncpg://" + v[len("postgres://") :]
+        elif v.startswith("postgresql://"):
+            v = "postgresql+asyncpg://" + v[len("postgresql://") :]
+        return _asyncpg_query(v)
 
     jwt_secret: str = "dev-secret-change-me-please-32-bytes-minimum"
     jwt_algorithm: str = "HS256"

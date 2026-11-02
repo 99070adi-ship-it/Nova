@@ -9,7 +9,7 @@ AI co-founder for e-commerce: a merchant admin (business dashboard, AI assistant
 | `storefront/` | React, Vite | 5174 |
 | `e2e/` | Playwright journeys against the real stack | n/a |
 
-More detail: [ARCHITECTURE.md](ARCHITECTURE.md), [README-ai.md](README-ai.md) (AI providers), [backend/README-voice.md](backend/README-voice.md) (NOVA's voice), [DEPLOY.md](DEPLOY.md) (production).
+More detail: [ARCHITECTURE.md](ARCHITECTURE.md), [README-ai.md](README-ai.md) (AI providers), [backend/README-voice.md](backend/README-voice.md) (NOVA's voice), [DEPLOY.md](DEPLOY.md) (production on Vercel).
 
 ## What is real, and what is not
 
