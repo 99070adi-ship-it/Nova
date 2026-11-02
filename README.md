@@ -48,6 +48,10 @@ Set in `backend/.env`; nothing here is ever sent to a browser.
 - `AI_PROVIDER=nvidia` + `NVIDIA_API_KEY`: the assistant, Guide and agents (see [README-ai.md](README-ai.md)). Default `fake` is deterministic and offline.
 - `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` (token scoped to **Workers AI** only): Photo Studio. Without them the studio says it isn't configured. It never fakes an image outside `ENV=local`.
 
+### Voice
+
+NOVA's voice is Kokoro-82M text-to-speech. Locally the backend can run it (`backend/README-voice.md`). On a serverless host it runs in the visitor's browser instead: set `VITE_VOICE_ENGINE=browser` for the admin (`server` = backend only, `auto` = try the backend, then fall back to the browser).
+
 ## Tests
 
 ```bash

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { getSpeechStatus, warmUpSpeech, type SpeechEngineState } from "../api/client";
+import type { SpeechEngineState } from "../api/client";
+import { warmUpAuto } from "../lib/speechSource";
 import { loadGuideVoiceMode, NovaVoice, saveGuideVoiceMode, type GuideVoiceMode } from "../lib/guideVoice";
 
 /** The key used before a user is known (or in tests without an auth provider). Still namespaced, so it
@@ -82,7 +83,7 @@ export function useGuideVoice(userKey: string | null): GuideVoice {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async (first: boolean) => {
       try {
-        const status = first ? await warmUpSpeech() : await getSpeechStatus();
+        const status = await warmUpAuto(first);
         if (cancelled) return;
         setEngineState(status.state);
         if (status.state === "loading" || status.state === "not_loaded") timer = setTimeout(() => void poll(false), 1500);

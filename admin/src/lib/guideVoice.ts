@@ -1,7 +1,7 @@
 /**
  * Voice for the NOVA Guide: natural speech for the SAME concise narration the Guide shows, plus the
- * small per-user preference that records how a person wants to be guided. The audio comes from the
- * backend (POST /ai/speech: self-hosted Kokoro text-to-speech, no API key anywhere) and is played
+ * small per-user preference that records how a person wants to be guided. The audio comes from Kokoro
+ * text-to-speech, from the backend (POST /ai/speech) or run in the browser itself (see speechSource.ts), and is played
  * with an ordinary <audio> element. Nothing here touches onboarding completion or any AI tool.
  *
  * Rules the engine enforces:
@@ -19,7 +19,7 @@
  *    reads it so the words appear as they are spoken (see Typewriter.playSynced).
  */
 
-import { fetchSpeech } from "../api/client";
+import { fetchSpeechAuto } from "./speechSource";
 
 export type GuideVoiceMode = "voice" | "text";
 
@@ -218,7 +218,7 @@ export interface VoiceDeps {
 
 function defaultDeps(): VoiceDeps {
   return {
-    fetchAudio: (text, signal) => fetchSpeech(text, signal),
+    fetchAudio: (text, signal) => fetchSpeechAuto(text, signal),
     createAudio: () => new window.Audio(),
     createObjectURL: (b) => URL.createObjectURL(b),
     revokeObjectURL: (u) => URL.revokeObjectURL(u),

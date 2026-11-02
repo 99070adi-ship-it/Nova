@@ -37,13 +37,13 @@ Functions do not run migrations themselves: they are stateless and start in para
 | `AI_PROVIDER`, `NVIDIA_API_KEY`, `NVIDIA_MODEL`, `NVIDIA_CHAT_TEMPLATE_KWARGS` | the assistant (see `backend/.env.example`); mark the key **Sensitive** |
 | `STUDIO_PROVIDER`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Photo Studio. Token scoped to **Workers AI** only |
 | `STUDIO_MAX_UPLOAD_BYTES` | `4194304`. Vercel caps a request body at 4.5 MB, so keep uploads under that |
-| `TTS_PROVIDER` | leave `kokoro`: the voice model is not installed on Vercel, so the Guide is text-only |
+| `TTS_PROVIDER` | leave `kokoro`: the voice model is not installed on the API (it cannot run in a function). NOVA's voice runs in the visitor's browser instead: see `VITE_VOICE_ENGINE` below |
 
 ## 3. Frontend projects
 
 | Project | Root | Environment variables |
 |---|---|---|
-| `nova-admin` | `admin` | `VITE_API_BASE_URL=https://<api-domain>/api/v1`, `VITE_STOREFRONT_ORIGIN=https://<storefront-domain>` |
+| `nova-admin` | `admin` | `VITE_API_BASE_URL=https://<api-domain>/api/v1`, `VITE_STOREFRONT_ORIGIN=https://<storefront-domain>`, `VITE_VOICE_ENGINE=browser` |
 | `nova-storefront` | `storefront` | `VITE_API_BASE_URL=https://<api-domain>/api/v1`, `VITE_ADMIN_ORIGINS=https://<admin-domain>` |
 
 Both projects need "include source files outside the root directory" (the storefront imports `contracts/`). `VITE_*` values are baked in at build time: change one and redeploy. Vercel assigns aliases such as `nova-api-eta.vercel.app`: read the real alias after the first deploy and use it everywhere, including `CORS_ORIGINS`.
@@ -59,7 +59,7 @@ Both projects need "include source files outside the root directory" (the storef
 
 - **Cold starts:** the first request after idle is slower. The pool is small (3 + 2) and recycled so Neon's connection limits are respected.
 - **Burst limit is per instance.** Photo Studio's per-minute limit lives in memory, so concurrent instances each count separately. The **daily** limit is stored in the database and is exact.
-- **No voice:** Kokoro (~2 GB) cannot run in a function; the Guide is text-only.
+- **Voice runs in the browser.** Kokoro (~2 GB with PyTorch) cannot run in a function, so `VITE_VOICE_ENGINE=browser` makes the admin run the same Kokoro model client-side (kokoro-js, ONNX). The first time someone chooses voice, the browser downloads about 90 MB of model files from Hugging Face and caches them; until they arrive the Guide just types, then the voice joins in. It uses WebGPU when available, otherwise WebAssembly (about 0.7x real time on a laptop CPU in my test). Nothing is uploaded. Needs a modern desktop or recent phone browser; where it can't run, the Guide stays text-only.
 - **Request body cap 4.5 MB**, **300 s** max duration, **no background work** beyond a request. Images are stored in Postgres: fine for a demo, move to object storage (Vercel Blob / S3) before scale.
 - **Free-tier limits** (Hobby functions, Neon, Cloudflare Workers AI, NVIDIA developer endpoints) are for prototyping.
 
