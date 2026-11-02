@@ -4,16 +4,18 @@ NOVA is three deployables. **Vercel hosts the two static frontends; it cannot ho
 
 ```
 Vercel project 1  admin/       ──┐
-Vercel project 2  storefront/  ──┼──▶  API (any container host)  ──▶  Postgres (with the pgvector extension)
+Vercel project 2  storefront/  ──┼──▶  API (any container host)  ──▶  Postgres
 ```
 
 ## 1. Database
 
-Any Postgres 15+ with the `pgvector` extension (Neon, Supabase, Render, Railway, RDS). Set `DATABASE_URL` (`postgresql+asyncpg://…` or plain `postgresql://…`, both accepted). Migrations run on container start (`alembic upgrade head`); the first one needs permission to `CREATE EXTENSION vector`.
+Any Postgres 15+ (Neon, Supabase, Render, Railway, RDS). No extensions are needed: nothing in the app or its migrations uses `pgvector`. Set `DATABASE_URL` (`postgresql+asyncpg://…` or plain `postgresql://…`, both accepted). Migrations run on container start (`alembic upgrade head`).
 
 ## 2. API (container host: Render, Railway, Fly.io, Cloud Run…)
 
-Build `backend/Dockerfile`. For a small image without the voice model use `--build-arg WITH_VOICE=0` and set `TTS_PROVIDER=fake` (the Guide becomes text-only). Start command (already the image default in compose): `sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"`. Health check: `GET /healthz`.
+**Render:** the repo has a `render.yaml` Blueprint (API service + Postgres, free plans, voice off). In Render choose New > Blueprint, select this repo, and fill in the prompted secrets (`NVIDIA_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`). `JWT_SECRET` is generated for you. Then follow step 3 below with the API's `https://….onrender.com` address. The Blueprint is untested until it has been run once.
+
+Build `backend/Dockerfile`. For a small image without the voice model use `--build-arg WITH_VOICE=0` and leave `TTS_PROVIDER=kokoro` (with no voice installed the Guide is simply text-only; `fake` would play a test tone). Start command (already the image default in compose): `sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"`. Health check: `GET /healthz`.
 
 | Variable | Value |
 |---|---|

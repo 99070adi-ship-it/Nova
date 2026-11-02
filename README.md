@@ -4,7 +4,7 @@ AI co-founder for e-commerce: a merchant admin (business dashboard, AI assistant
 
 | Part | Stack | Dev port |
 |---|---|---|
-| `backend/` | FastAPI, SQLAlchemy (async), Alembic, Postgres + pgvector | 8100 |
+| `backend/` | FastAPI, SQLAlchemy (async), Alembic, Postgres | 8100 |
 | `admin/` | React, Vite, TanStack Query, Tailwind | 5173 |
 | `storefront/` | React, Vite | 5174 |
 | `e2e/` | Playwright journeys against the real stack | n/a |
