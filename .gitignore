@@ -30,3 +30,7 @@ dist/
 video/
 e2e/artifacts/
 *.log
+
+# Local one-off credentials (never commit)
+.env.neon
+backend/.env.neon
