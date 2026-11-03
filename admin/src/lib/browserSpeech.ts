@@ -11,6 +11,11 @@
 
 import type { SpeechEngineState, SpeechStatus } from "../api/client";
 
+// onnxruntime loads its worker script and WebAssembly from a CDN by default. Both are served from NOVA's own origin instead,
+// so a blocked or slow third-party host (or Safari's cross-origin worker rules) cannot break the voice.
+const ORT_MJS = new URL("../../node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.mjs", import.meta.url).href;
+const ORT_WASM = new URL("../../node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm", import.meta.url).href;
+
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const VOICE = "af_heart" as const; // the backend's default voice
 const ENGINE = "kokoro-browser";
@@ -31,6 +36,8 @@ export interface VoiceProgress {
   phase: "downloading" | "starting";
   /** When anything last changed (ms since the epoch): lets the UI and the watchdog tell "working" from "stuck". */
   updatedAt: number;
+  /** Why it failed, for the setup screen's "details" line. */
+  error?: string;
 }
 const fresh = (): VoiceProgress => ({ state: "not_loaded", percent: null, loadedBytes: 0, totalBytes: 0, phase: "downloading", updatedAt: 0 });
 let progress: VoiceProgress = fresh();
@@ -107,7 +114,10 @@ export function status(): SpeechStatus {
  */
 async function load(): Promise<TtsLike> {
   const [{ KokoroTTS }, { env }] = await Promise.all([import("kokoro-js"), import("@huggingface/transformers")]);
-  if (env.backends.onnx.wasm) env.backends.onnx.wasm.proxy = true; // run the model in a worker
+  if (env.backends.onnx.wasm) {
+    env.backends.onnx.wasm.proxy = true; // run the model in a worker
+    env.backends.onnx.wasm.wasmPaths = { mjs: ORT_MJS, wasm: ORT_WASM };
+  }
   setExpectedBytes(EXPECTED_BYTES);
   const tts = await KokoroTTS.from_pretrained(MODEL_ID, { dtype: "q8", device: "wasm", progress_callback: onDownloadEvent });
   // All bytes are in: the model is now initialised and given its first synthesis (which pays one-off start-up costs), while the
@@ -147,7 +157,13 @@ export function warmUp(): SpeechStatus {
       );
     }).then(
       (tts) => { setState("ready"); return tts; },
-      (err) => { setState("failed"); loading = null; throw err; },
+      (err) => {
+        console.error("[voice] setup failed", err);
+        publish({ error: err instanceof Error ? err.message : String(err) });
+        setState("failed");
+        loading = null;
+        throw err;
+      },
     );
     loading.catch(() => {}); // the failure is reported through status(); callers of synthesize() see it as a rejection
   }
