@@ -255,6 +255,58 @@ class FakeSpeechProvider(SpeechProvider):
         return {"engine": "fake", "state": "ready", "ready": True}
 
 
+# ---- Cloudflare Workers AI (MeloTTS) ----------------------------------------------------------------------
+
+
+class CloudflareSpeechProvider(SpeechProvider):
+    """Speech from Cloudflare Workers AI, for hosts that cannot run Kokoro. Verified live: POST .../ai/run/@cf/myshell-ai/melotts with
+    JSON {prompt, lang} answers {"result": {"audio": "<base64 WAV>"}}. The credential stays here; the text is never logged and the
+    provider's own error text is never passed on."""
+
+    def __init__(self, settings: Settings):
+        self._account = settings.cloudflare_account_id
+        self._token = settings.cloudflare_api_token
+        self._model = settings.cloudflare_tts_model
+        self._timeout = settings.tts_timeout_seconds
+
+    def _configured(self) -> bool:
+        return bool(self._account and self._token)
+
+    def status(self) -> dict:
+        state = "ready" if self._configured() else "failed"
+        out: dict = {"engine": "cloudflare-melotts", "state": state, "ready": state == "ready"}
+        if state == "failed":
+            out["reason"] = "The voice service is not configured on this server."
+        return out
+
+    async def stream(self, text: str) -> AsyncIterator[bytes]:
+        import base64
+
+        import httpx
+
+        if not self._configured():
+            raise SpeechUnavailableError()
+        url = f"https://api.cloudflare.com/client/v4/accounts/{self._account}/ai/run/{self._model}"
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.post(url, headers={"Authorization": f"Bearer {self._token}"}, json={"prompt": text, "lang": "en"})
+        except httpx.HTTPError:
+            log.warning("tts.cloudflare_unreachable", chars=len(text))
+            raise SpeechUnavailableError() from None
+        if resp.status_code == 429:
+            raise SpeechRateLimitedError()
+        if resp.status_code != 200:
+            log.warning("tts.cloudflare_failed", status=resp.status_code, chars=len(text))
+            raise SpeechUnavailableError()
+        try:
+            audio = base64.b64decode(resp.json()["result"]["audio"])
+        except (KeyError, TypeError, ValueError):
+            audio = b""
+        if audio[:4] != b"RIFF":  # a WAV, as the Guide expects; anything else is not usable audio
+            raise SpeechUnavailableError()
+        yield audio
+
+
 # ---- wiring -------------------------------------------------------------------------------------------
 
 _provider: SpeechProvider | None = None
@@ -264,6 +316,8 @@ def build_speech_provider() -> SpeechProvider:
     s = get_settings()
     if s.tts_provider == "fake":
         return FakeSpeechProvider()
+    if s.tts_provider == "cloudflare":
+        return CloudflareSpeechProvider(s)
     return KokoroSpeechProvider(KokoroEngine(s))
 
 

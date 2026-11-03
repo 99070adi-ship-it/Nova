@@ -91,7 +91,9 @@ class Settings(BaseSettings):
     # Text-to-speech for the NOVA Guide / helping centre (app/ai/speech.py): self-hosted Kokoro-82M
     # (https://github.com/hexgrad/kokoro). No API key, no per-request cost; the model runs in this
     # process. "fake" returns a short tone (local playback checks, tests).
-    tts_provider: Literal["kokoro", "fake"] = "kokoro"
+    tts_provider: Literal["kokoro", "cloudflare", "fake"] = "kokoro"
+    # "cloudflare": MeloTTS on Workers AI (reuses CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN). For hosts that cannot run Kokoro (serverless).
+    cloudflare_tts_model: str = "@cf/myshell-ai/melotts"
     kokoro_repo_id: str = "hexgrad/Kokoro-82M"
     kokoro_lang_code: str = "a"  # "a" = American English, "b" = British English (see the Kokoro docs)
     kokoro_voice: str = "af_heart"  # e.g. af_bella, af_nicole, am_michael, bf_emma
