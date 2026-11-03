@@ -43,10 +43,14 @@ Functions do not run migrations themselves: they are stateless and start in para
 
 | Project | Root | Environment variables |
 |---|---|---|
-| `nova-admin` | `admin` | `VITE_API_BASE_URL=https://<api-domain>/api/v1`, `VITE_STOREFRONT_ORIGIN=https://<storefront-domain>`, `VITE_VOICE_ENGINE=browser` |
+| `nova-admin` | `admin` | `VITE_API_BASE_URL=/api/v1` (same-origin, see below), `VITE_STOREFRONT_ORIGIN=https://<storefront-domain>`, `VITE_VOICE_ENGINE=browser` |
 | `nova-storefront` | `storefront` | `VITE_API_BASE_URL=https://<api-domain>/api/v1`, `VITE_ADMIN_ORIGINS=https://<admin-domain>` |
 
 Both projects need "include source files outside the root directory" (the storefront imports `contracts/`). `VITE_*` values are baked in at build time: change one and redeploy. Vercel assigns aliases such as `nova-api-eta.vercel.app`: read the real alias after the first deploy and use it everywhere, including `CORS_ORIGINS`.
+
+### Why the admin calls the API on its own address
+
+`admin/vercel.json` rewrites `/api/v1/*` to the API project, so the browser only ever talks to the admin's own origin. That makes the refresh cookie **first-party**: browsers that block third-party cookies (Safari, Brave, Chrome in some modes) would otherwise drop it and sign people out on every refresh (this was reproduced: with the cookie removed, a refresh lands on /login). It also means the admin needs no CORS. **The rewrite's destination is the API's Vercel address** (`https://nova-api-eta.vercel.app` today): edit it in `admin/vercel.json` if the API's address changes. The storefront is public and cookie-less, so it still calls the API directly (that is what `CORS_ORIGINS` is for).
 
 ## 4. First deploy checklist
 
@@ -60,7 +64,7 @@ Both projects need "include source files outside the root directory" (the storef
 - **Cold starts:** the first request after idle is slower. The pool is small (3 + 2) and recycled so Neon's connection limits are respected.
 - **Burst limit is per instance.** Photo Studio's per-minute limit lives in memory, so concurrent instances each count separately. The **daily** limit is stored in the database and is exact.
 - **Voice runs in the browser.** Kokoro (~2 GB with PyTorch) cannot run in a function, so `VITE_VOICE_ENGINE=browser` makes the admin run the same Kokoro model client-side (kokoro-js, ONNX). The first time someone chooses voice, the browser downloads about 90 MB of model files from Hugging Face and caches them; until they arrive the Guide just types, then the voice joins in. It uses WebGPU when available, otherwise WebAssembly (about 0.7x real time on a laptop CPU in my test). Nothing is uploaded. Needs a modern desktop or recent phone browser; where it can't run, the Guide stays text-only.
-- **Request body cap 4.5 MB**, **300 s** max duration, **no background work** beyond a request. Images are stored in Postgres: fine for a demo, move to object storage (Vercel Blob / S3) before scale.
+- **Request body cap 4.5 MB** (a larger upload gets a plain-text 413 from Vercel; the UI checks the size first), **300 s** max duration, **no background work** beyond a request. Images are stored in Postgres: fine for a demo, move to object storage (Vercel Blob / S3) before scale.
 - **Free-tier limits** (Hobby functions, Neon, Cloudflare Workers AI, NVIDIA developer endpoints) are for prototyping.
 
 ## What has and has not been verified

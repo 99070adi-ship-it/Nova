@@ -838,7 +838,9 @@ export async function studioEdit(prompt: string, image: File) {
   const headers: Record<string, string> = {};
   if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
   const res = await fetch(`${API_BASE_URL}/photo-studio/edit`, { method: "POST", headers, body: form, credentials: "include" });
-  const body = await res.json();
+  // A host-level rejection (e.g. 413 from the platform before the API sees the request) is not JSON.
+  const body = await res.json().catch(() => null);
+  if (!body) throw new ApiError(res.status, "upload_failed", res.status === 413 ? "That image is too large to upload. Please use a smaller one." : "The upload failed. Please try again.", null);
   if (!res.ok) {
     const err = body?.error ?? { code: "unknown", message: "Request failed" };
     throw new ApiError(res.status, err.code, err.message, err.details);

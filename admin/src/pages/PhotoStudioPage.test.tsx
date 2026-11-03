@@ -117,4 +117,15 @@ describe("PhotoStudioPage", () => {
     fireEvent.change(screen.getByLabelText("What should change?"), { target: { value: "make the background grey" } });
     expect(screen.getByRole("button", { name: "Edit image" })).toBeEnabled();
   });
+
+  it("refuses an image over the size limit before uploading it, with a clear message", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: "Edit" }));
+    const big = new File(["x"], "big.png", { type: "image/png" });
+    Object.defineProperty(big, "size", { value: 6 * 1024 * 1024 });
+    fireEvent.change(screen.getByLabelText("Image to edit"), { target: { files: [big] } });
+    expect(await screen.findByRole("alert")).toHaveTextContent("larger than 5 MB");
+    fireEvent.change(screen.getByLabelText("What should change?"), { target: { value: "make it grey" } });
+    expect(screen.getByRole("button", { name: "Edit image" })).toBeDisabled();
+  });
 });

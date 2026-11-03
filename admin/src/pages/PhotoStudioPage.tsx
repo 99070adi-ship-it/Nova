@@ -255,7 +255,18 @@ export default function PhotoStudioPage() {
               <label htmlFor="studio-file" className="text-sm font-medium">Image to edit</label>
               <input
                 id="studio-file" ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp"
-                onChange={(e) => { setFile(e.target.files?.[0] ?? null); setEditResult(null); }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  setEditResult(null);
+                  if (f && f.size > s.max_upload_mb * 1024 * 1024) {
+                    setFile(null);
+                    setError(`That image is larger than ${s.max_upload_mb} MB. Please choose a smaller one.`);
+                    e.target.value = "";
+                    return;
+                  }
+                  setError(null);
+                  setFile(f);
+                }}
                 className="mt-1.5 block w-full text-sm"
               />
               <p className="mt-1 text-xs text-fg-3">JPEG, PNG or WebP, up to {s.max_upload_mb} MB. Your original is kept untouched.</p>
