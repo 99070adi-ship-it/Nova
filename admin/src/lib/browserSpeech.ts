@@ -13,8 +13,8 @@ import type { SpeechEngineState, SpeechStatus } from "../api/client";
 
 // onnxruntime loads its worker script and WebAssembly from a CDN by default. Both are served from NOVA's own origin instead,
 // so a blocked or slow third-party host (or Safari's cross-origin worker rules) cannot break the voice.
-const ORT_MJS = new URL("../../node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.mjs", import.meta.url).href;
-const ORT_WASM = new URL("../../node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm", import.meta.url).href;
+const ORT_MJS = new URL("../../node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs", import.meta.url).href;
+const ORT_WASM = new URL("../../node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm", import.meta.url).href;
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const VOICE = "af_heart" as const; // the backend's default voice
@@ -126,7 +126,8 @@ async function load(): Promise<TtsLike> {
     // The runtime is initialised once, in one mode, and cannot be switched afterwards, so the mode is chosen up front. Elsewhere the
     // model runs in a worker; in Safari it runs on the page's own thread with a single thread, which is slower per sentence but is
     // the path that does not depend on module workers.
-    const main = new URLSearchParams(typeof location === "undefined" ? "" : location.search).get("voice-mode") === "main" || prefersMainThread();
+    const forced = new URLSearchParams(typeof location === "undefined" ? "" : location.search).get("voice-mode");
+    const main = forced ? forced === "main" : prefersMainThread();
     wasm.proxy = !main;
     if (main) wasm.numThreads = 1;
   }
