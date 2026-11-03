@@ -76,3 +76,13 @@ describe("browser voice download progress", () => {
     expect(voice.getProgress().updatedAt).toBeGreaterThanOrEqual(before);
   });
 });
+
+describe("prefersMainThread", () => {
+  it("is true for Safari and iOS browsers, false for Chromium and Firefox", async () => {
+    const { prefersMainThread } = await import("./browserSpeech");
+    expect(prefersMainThread("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15")).toBe(true);
+    expect(prefersMainThread("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 CriOS/130.0 Mobile/15E148 Safari/604.1")).toBe(true);
+    expect(prefersMainThread("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36")).toBe(false);
+    expect(prefersMainThread("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:130.0) Gecko/20100101 Firefox/130.0")).toBe(false);
+  });
+});

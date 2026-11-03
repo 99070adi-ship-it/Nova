@@ -112,34 +112,35 @@ export function status(): SpeechStatus {
  * Always the small quantised model on the CPU (WebAssembly): about 88 MB, and it behaves the same in every browser. A WebGPU
  * build exists but is full precision (~330 MB), needs GPU shader compilation, and Safari stalled on it, so it is not used.
  */
+/** Safari (and every iOS browser) is the fragile one for onnxruntime's module worker; Chrome, Edge and Firefox are fine with it. */
+export function prefersMainThread(ua: string = typeof navigator === "undefined" ? "" : navigator.userAgent): boolean {
+  return /safari/i.test(ua) && !/chrome|chromium|crios|fxios|edg|android/i.test(ua) || /iphone|ipad|ipod/i.test(ua);
+}
+
 async function load(): Promise<TtsLike> {
   const [{ KokoroTTS }, { env }] = await Promise.all([import("kokoro-js"), import("@huggingface/transformers")]);
   setExpectedBytes(EXPECTED_BYTES);
   const wasm = env.backends.onnx.wasm;
-  if (wasm) wasm.wasmPaths = { mjs: ORT_MJS, wasm: ORT_WASM };
-  // First the fast setup (the model runs in a worker). If a browser refuses that, retry once in the simplest mode: one thread, no
-  // worker. The files are already cached by then, so the retry costs seconds, not another download.
-  const modes = [{ proxy: true, threads: undefined }, { proxy: false, threads: 1 }];
-  let failure: unknown;
-  for (const mode of modes) {
-    try {
-      if (wasm) {
-        wasm.proxy = mode.proxy;
-        if (mode.threads) wasm.numThreads = mode.threads;
-      }
-      const tts = await KokoroTTS.from_pretrained(MODEL_ID, { dtype: "q8", device: "wasm", progress_callback: onDownloadEvent });
-      // All bytes are in: the model is now initialised and given its first synthesis (which pays one-off start-up costs), while the
-      // setup screen is still showing, not on NOVA's first sentence.
-      publish({ phase: "starting", percent: Math.max(progress.percent ?? 0, 99) });
-      await withTimeout(tts.generate("Hello.", { voice: VOICE, speed: 1 }), START_TIMEOUT_MS, "Voice start-up timed out");
-      return tts;
-    } catch (err) {
-      failure = err;
-      console.error(`[voice] start-up failed (${mode.proxy ? "worker" : "simple"} mode)`, err);
-      publish({ phase: "starting", error: err instanceof Error ? err.message : String(err) });
-    }
+  if (wasm) {
+    wasm.wasmPaths = { mjs: ORT_MJS, wasm: ORT_WASM };
+    // The runtime is initialised once, in one mode, and cannot be switched afterwards, so the mode is chosen up front. Elsewhere the
+    // model runs in a worker; in Safari it runs on the page's own thread with a single thread, which is slower per sentence but is
+    // the path that does not depend on module workers.
+    const main = new URLSearchParams(typeof location === "undefined" ? "" : location.search).get("voice-mode") === "main" || prefersMainThread();
+    wasm.proxy = !main;
+    if (main) wasm.numThreads = 1;
   }
-  throw failure;
+  try {
+    const tts = await KokoroTTS.from_pretrained(MODEL_ID, { dtype: "q8", device: "wasm", progress_callback: onDownloadEvent });
+    // All bytes are in: the model is now initialised and given its first synthesis (which pays one-off start-up costs), while the
+    // setup screen is still showing, not on NOVA's first sentence.
+    publish({ phase: "starting", percent: Math.max(progress.percent ?? 0, 99) });
+    await withTimeout(tts.generate("Hello.", { voice: VOICE, speed: 1 }), START_TIMEOUT_MS, "Voice start-up timed out");
+    return tts;
+  } catch (err) {
+    const where = wasm?.proxy ? "worker" : "main thread";
+    throw new Error(`${err instanceof Error ? err.message : String(err)} (${where})`);
+  }
 }
 
 function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
