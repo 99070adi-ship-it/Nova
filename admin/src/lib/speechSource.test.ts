@@ -82,4 +82,25 @@ describe("speechSource", () => {
     expect(await s.fetchSpeechAuto("hi")).toBe(SERVER);
     expect(browser.warmUp).not.toHaveBeenCalled();
   });
+
+  it("browser engine: does not start the download until voice is actually chosen", async () => {
+    browser.status.mockReturnValue({ engine: "kokoro-browser", state: "not_loaded", ready: false });
+    const s = await load("browser");
+    expect((await s.warmUpAuto(true, false)).state).toBe("not_loaded");
+    expect(browser.warmUp).not.toHaveBeenCalled(); // someone who picks text never downloads 90 MB
+    expect(await s.warmUpAuto(true, true)).toEqual(ready);
+    expect(browser.warmUp).toHaveBeenCalledTimes(1);
+  });
+
+  it("paces speech by engine: whole messages and the default grace for the server, sentence by sentence and a long grace for the browser", async () => {
+    const server = await load("server");
+    expect(server.voiceTuning()).toEqual({ chunkChars: 480, maxChunks: 6, startGraceMs: undefined, prefetchChunks: 2 });
+    expect(server.usesBrowserVoice()).toBe(false);
+    const browserMode = await load("browser");
+    const t = browserMode.voiceTuning();
+    expect(t.chunkChars).toBeLessThan(160); // a typical two-sentence line becomes two chunks
+    expect(t.startGraceMs).toBeGreaterThan(6000); // longer than the Guide's default give-up time
+    expect(t.prefetchChunks).toBe(0); // synthesis is one-at-a-time on the visitor's CPU: a prefetch would queue ahead of the line being spoken
+    expect(browserMode.usesBrowserVoice()).toBe(true);
+  });
 });

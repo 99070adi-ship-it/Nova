@@ -14,6 +14,8 @@ import { useGuideVoice, type GuideVoice } from "../hooks/useGuideVoice";
 import { useCurrentUserKey } from "../lib/auth";
 import AiStatusNote from "./AiStatusNote";
 import GuideVoiceChoice from "./GuideVoiceChoice";
+import GuideVoiceSetup from "./GuideVoiceSetup";
+import { voiceTuning } from "../lib/speechSource";
 import GuideVoiceControls from "./GuideVoiceControls";
 import NovaFace from "./NovaFace";
 import NovaSpotlight from "./NovaSpotlight";
@@ -210,6 +212,8 @@ function LessonRunner({
   // Voice is asked for only after an explicit choice; `enabled` is read at speak time, so switching
   // it on or off mid-lesson takes effect for the very next narration.
   const needsChoice = !held && voice.mode === null;
+  // Voice was chosen and its one-time model download is in progress (or failed): the tour waits behind the progress screen.
+  const settingUpVoice = !held && voice.mode === "voice" && (voice.setup.visible || voice.setup.failed);
   const lessonVoice: NovaLessonVoice = {
     enabled: () => voice.enabled,
     speak: (text) => voice.engine.speak(text),
@@ -222,6 +226,7 @@ function LessonRunner({
   };
 
   const lesson = useNovaLesson({
+    voiceStartTimeoutMs: voiceTuning().startGraceMs,
     demoActions: step.demoActions,
     // NOVA's words are authored per lesson and kept short (lib/novaLessons.ts), so the tour never
     // waits on a network call before NOVA starts typing.
@@ -296,11 +301,11 @@ function LessonRunner({
   }
 
   useEffect(() => {
-    if (startedRef.current || held || needsChoice) return;
+    if (startedRef.current || held || needsChoice || settingUpVoice) return;
     startedRef.current = true;
     void attemptStart();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [held, needsChoice]);
+  }, [held, needsChoice, settingUpVoice]);
 
   // Held on a page that isn't this step's: if the visitor gets to the step's page on their own,
   // the tour simply continues from there.
@@ -409,6 +414,10 @@ function LessonRunner({
         </div>
       </div>
     );
+  }
+
+  if (settingUpVoice) {
+    return <GuideVoiceSetup progress={voice.setup.progress} failed={voice.setup.failed} onContinueInText={() => voice.setMode("text")} />;
   }
 
   if (needsChoice) return <GuideVoiceChoice supported={voice.supported} engineUnavailable={voice.engineUnavailable} onChoose={voice.setMode} />;

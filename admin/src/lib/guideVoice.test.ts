@@ -448,3 +448,13 @@ describe("voice preference storage", () => {
     set.mockRestore();
   });
 });
+
+describe("chunking for in-browser speech", () => {
+  it("a typical two-sentence line is split small enough to start quickly, with nothing lost", () => {
+    const text = "Hey, I'm NOVA. Think of me as your e-commerce co-founder, minus the equity talks and the meetings that could have been a sentence.";
+    const chunks = chunkRanges(text, 110, 12).map((r) => text.slice(r.start, r.end));
+    expect(chunks.length).toBeGreaterThanOrEqual(2); // so the first words start after about one sentence, not after the whole line
+    expect(chunks.every((c) => c.length <= 110)).toBe(true);
+    expect(chunks.join(" ")).toBe(text); // nothing lost, order kept
+  });
+});

@@ -19,7 +19,7 @@
  *    reads it so the words appear as they are spoken (see Typewriter.playSynced).
  */
 
-import { fetchSpeechAuto } from "./speechSource";
+import { fetchSpeechAuto, voiceTuning } from "./speechSource";
 
 export type GuideVoiceMode = "voice" | "text";
 
@@ -313,7 +313,8 @@ export class NovaVoice {
     const abort = (this.abort = new AbortController());
     // The timeline is anchored to the text exactly as the Guide shows it (its offsets index that string).
     const shown = text;
-    const chunks = chunkRanges(shown);
+    const tuning = voiceTuning();
+    const chunks = chunkRanges(shown, tuning.chunkChars, tuning.maxChunks);
     this.timeline = { text: shown, chunks, clips: [], index: 0, done: false };
     const started = this.started;
     void this.run(shown, chunks, generation, abort.signal);
@@ -326,7 +327,8 @@ export class NovaVoice {
     const clean = text.trim();
     if (!clean || !this.supported || this.failed) return;
     const signal = new AbortController().signal; // never cancelled: the audio is wanted soon
-    for (const r of chunkRanges(clean).slice(0, 2)) this.fetchChunk(clean.slice(r.start, r.end), signal).catch(() => {});
+    const tuning = voiceTuning();
+    for (const r of chunkRanges(clean, tuning.chunkChars, tuning.maxChunks).slice(0, tuning.prefetchChunks)) this.fetchChunk(clean.slice(r.start, r.end), signal).catch(() => {});
   }
 
   /** Speak the most recent narration again from the start. */

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { SpeechEngineState } from "../api/client";
-import { warmUpAuto } from "../lib/speechSource";
+import { getProgress, subscribe, type VoiceProgress } from "../lib/browserSpeech";
+import { usesBrowserVoice, warmUpAuto } from "../lib/speechSource";
 import { loadGuideVoiceMode, NovaVoice, saveGuideVoiceMode, type GuideVoiceMode } from "../lib/guideVoice";
 
 /** The key used before a user is known (or in tests without an auth provider). Still namespaced, so it
@@ -26,7 +27,19 @@ export interface GuideVoice {
   failed: boolean;
   /** The browser wants a click before it will play audio; Replay will do it. */
   blocked: boolean;
+  /** The one-time download of the in-browser voice model, started when voice is chosen. */
+  setup: VoiceSetup;
 }
+
+export interface VoiceSetup {
+  /** Voice was chosen and the in-browser model is not ready yet: show the progress screen and hold the tour, so no narration is
+   * requested (and silently times out) while the model is still loading. */
+  visible: boolean;
+  /** The download failed (or the browser cannot run the voice): offer to continue in text. */
+  failed: boolean;
+  progress: VoiceProgress;
+}
+
 
 const MAX_VOICE_RETRIES = 3;
 const VOICE_RETRY_DELAY_MS = 2000;
@@ -83,7 +96,7 @@ export function useGuideVoice(userKey: string | null): GuideVoice {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async (first: boolean) => {
       try {
-        const status = await warmUpAuto(first);
+        const status = await warmUpAuto(first, mode === "voice");
         if (cancelled) return;
         setEngineState(status.state);
         if (status.state === "loading" || status.state === "not_loaded") timer = setTimeout(() => void poll(false), 1500);
@@ -96,7 +109,7 @@ export function useGuideVoice(userKey: string | null): GuideVoice {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [wantsEngine, engine, key]);
+  }, [wantsEngine, engine, key, mode]);
 
   // A failed request is usually temporary (the voice model was still loading, a busy moment, a dropped connection).
   // Staying silent until the person flips voice off and on is the bug this fixes: try again a few times, and only
@@ -114,11 +127,21 @@ export function useGuideVoice(userKey: string | null): GuideVoice {
     return () => clearTimeout(timer);
   }, [failed, mode, engineState, engine]);
 
+  // The in-browser model: a progress screen from the moment voice is chosen until it is ready (see browserSpeech.ts). It also
+  // covers the instant before loading has begun ("not_loaded"), so the tour can never start in that gap.
+  const download = useSyncExternalStore(subscribe, getProgress);
+  const waiting = download.state === "not_loaded" || download.state === "loading";
+  const setup: VoiceSetup = {
+    visible: mode === "voice" && engine.supported && usesBrowserVoice() && waiting,
+    failed: mode === "voice" && usesBrowserVoice() && download.state === "failed",
+    progress: download,
+  };
+
   const supported = engine.supported;
   const engineUnavailable = engineState === "failed";
   return {
     mode, setMode, engine, supported, engineState, engineUnavailable,
     enabled: mode === "voice" && supported && !failed && !engineUnavailable,
-    speaking, failed: failed || (mode === "voice" && engineUnavailable), blocked,
+    speaking, failed: failed || (mode === "voice" && engineUnavailable), blocked, setup,
   };
 }
