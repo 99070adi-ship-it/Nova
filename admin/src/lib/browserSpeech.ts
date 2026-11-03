@@ -114,17 +114,32 @@ export function status(): SpeechStatus {
  */
 async function load(): Promise<TtsLike> {
   const [{ KokoroTTS }, { env }] = await Promise.all([import("kokoro-js"), import("@huggingface/transformers")]);
-  if (env.backends.onnx.wasm) {
-    env.backends.onnx.wasm.proxy = true; // run the model in a worker
-    env.backends.onnx.wasm.wasmPaths = { mjs: ORT_MJS, wasm: ORT_WASM };
-  }
   setExpectedBytes(EXPECTED_BYTES);
-  const tts = await KokoroTTS.from_pretrained(MODEL_ID, { dtype: "q8", device: "wasm", progress_callback: onDownloadEvent });
-  // All bytes are in: the model is now initialised and given its first synthesis (which pays one-off start-up costs), while the
-  // setup screen is still showing, not on NOVA's first sentence.
-  publish({ phase: "starting", percent: Math.max(progress.percent ?? 0, 99) });
-  await withTimeout(tts.generate("Hello.", { voice: VOICE, speed: 1 }), START_TIMEOUT_MS, "Voice start-up timed out");
-  return tts;
+  const wasm = env.backends.onnx.wasm;
+  if (wasm) wasm.wasmPaths = { mjs: ORT_MJS, wasm: ORT_WASM };
+  // First the fast setup (the model runs in a worker). If a browser refuses that, retry once in the simplest mode: one thread, no
+  // worker. The files are already cached by then, so the retry costs seconds, not another download.
+  const modes = [{ proxy: true, threads: undefined }, { proxy: false, threads: 1 }];
+  let failure: unknown;
+  for (const mode of modes) {
+    try {
+      if (wasm) {
+        wasm.proxy = mode.proxy;
+        if (mode.threads) wasm.numThreads = mode.threads;
+      }
+      const tts = await KokoroTTS.from_pretrained(MODEL_ID, { dtype: "q8", device: "wasm", progress_callback: onDownloadEvent });
+      // All bytes are in: the model is now initialised and given its first synthesis (which pays one-off start-up costs), while the
+      // setup screen is still showing, not on NOVA's first sentence.
+      publish({ phase: "starting", percent: Math.max(progress.percent ?? 0, 99) });
+      await withTimeout(tts.generate("Hello.", { voice: VOICE, speed: 1 }), START_TIMEOUT_MS, "Voice start-up timed out");
+      return tts;
+    } catch (err) {
+      failure = err;
+      console.error(`[voice] start-up failed (${mode.proxy ? "worker" : "simple"} mode)`, err);
+      publish({ phase: "starting", error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  throw failure;
 }
 
 function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {

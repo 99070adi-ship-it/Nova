@@ -49,7 +49,7 @@ export default function GuideVoiceSetup({
         {failed ? (
           <>
             <p role="alert" className="mt-3 text-sm text-fg-2" data-testid="guide-voice-setup-failed">
-              The voice files couldn't be downloaded in this browser, so NOVA will guide you in text. Nothing else is affected.
+              The voice couldn't be started in this browser, so NOVA will guide you in text. Nothing else is affected.
             </p>
             {progress.error && <p className="mt-2 break-words text-xs text-fg-3" data-testid="guide-voice-setup-error">Details: {progress.error}</p>}
           </>
