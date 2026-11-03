@@ -5,7 +5,7 @@ beforeEach(() => voice.resetForTests());
 
 describe("browser voice download progress", () => {
   it("starts unknown, so the UI shows an indeterminate bar", () => {
-    expect(voice.getProgress()).toMatchObject({ state: "not_loaded", percent: null, loadedBytes: 0, totalBytes: 0 });
+    expect(voice.getProgress()).toMatchObject({ state: "not_loaded", percent: null, loadedBytes: 0, totalBytes: 0, phase: "downloading" });
   });
 
   it("folds per-file events into one overall percentage and byte count", () => {
@@ -68,5 +68,11 @@ describe("browser voice download progress", () => {
     voice.setExpectedBytes(100);
     voice.onDownloadEvent({ status: "progress", file: "a", loaded: 100, total: 400 });
     expect(voice.getProgress()).toMatchObject({ percent: 25, totalBytes: 400 });
+  });
+
+  it("stamps every change so the UI and watchdog can tell working from stuck", () => {
+    const before = Date.now();
+    voice.onDownloadEvent({ status: "progress", file: "a", loaded: 1, total: 10 });
+    expect(voice.getProgress().updatedAt).toBeGreaterThanOrEqual(before);
   });
 });

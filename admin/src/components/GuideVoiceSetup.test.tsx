@@ -1,9 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-import GuideVoiceSetup from "./GuideVoiceSetup";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import GuideVoiceSetup, { STILL_WORKING_AFTER_MS } from "./GuideVoiceSetup";
 import type { VoiceProgress } from "../lib/browserSpeech";
 
-const progress = (over: Partial<VoiceProgress> = {}): VoiceProgress => ({ state: "loading", percent: null, loadedBytes: 0, totalBytes: 0, ...over });
+const progress = (over: Partial<VoiceProgress> = {}): VoiceProgress => ({ state: "loading", percent: null, loadedBytes: 0, totalBytes: 0, phase: "downloading", updatedAt: Date.now(), ...over });
 const MB = 1024 * 1024;
 
 describe("GuideVoiceSetup", () => {
@@ -38,5 +38,24 @@ describe("GuideVoiceSetup", () => {
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Continue in text" }));
     expect(onContinueInText).toHaveBeenCalledTimes(1);
+  });
+
+  it("says the voice is starting once every byte is in, so a full bar never looks frozen", () => {
+    render(<GuideVoiceSetup progress={progress({ percent: 99, loadedBytes: 88 * MB, totalBytes: 88 * MB, phase: "starting" })} failed={false} onContinueInText={() => {}} />);
+    expect(screen.getByTestId("guide-voice-setup-status")).toHaveTextContent("Starting the voice…");
+    expect(screen.getByText(/voice is starting up/)).toBeInTheDocument();
+  });
+
+  describe("when nothing has changed for a while", () => {
+    afterEach(() => vi.useRealTimers());
+
+    it("adds a 'still working' note with the skip option, but not before then", () => {
+      vi.useFakeTimers();
+      render(<GuideVoiceSetup progress={progress({ percent: 40, loadedBytes: 35 * MB, totalBytes: 88 * MB })} failed={false} onContinueInText={() => {}} />);
+      expect(screen.queryByTestId("guide-voice-setup-quiet")).not.toBeInTheDocument();
+      act(() => { vi.advanceTimersByTime(STILL_WORKING_AFTER_MS + 4000); });
+      expect(screen.getByTestId("guide-voice-setup-quiet")).toHaveTextContent("Still working");
+      expect(screen.getByRole("button", { name: "Skip and use text only" })).toBeInTheDocument();
+    });
   });
 });

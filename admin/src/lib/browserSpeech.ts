@@ -27,8 +27,13 @@ export interface VoiceProgress {
   percent: number | null;
   loadedBytes: number;
   totalBytes: number;
+  /** "downloading" while bytes are arriving; "starting" once they are all in and the model is being initialised. */
+  phase: "downloading" | "starting";
+  /** When anything last changed (ms since the epoch): lets the UI and the watchdog tell "working" from "stuck". */
+  updatedAt: number;
 }
-let progress: VoiceProgress = { state: "not_loaded", percent: null, loadedBytes: 0, totalBytes: 0 };
+const fresh = (): VoiceProgress => ({ state: "not_loaded", percent: null, loadedBytes: 0, totalBytes: 0, phase: "downloading", updatedAt: 0 });
+let progress: VoiceProgress = fresh();
 const listeners = new Set<() => void>();
 const files = new Map<string, { loaded: number; total: number }>();
 /** Files are announced one by one, so the real total only becomes known late. Dividing by the size we expect keeps the bar from
@@ -38,10 +43,13 @@ export function setExpectedBytes(bytes: number): void {
   expectedBytes = bytes;
 }
 const MB = 1024 * 1024;
-const EXPECTED_WASM_BYTES = 88 * MB; // q8 model + voices, as measured
-const EXPECTED_WEBGPU_BYTES = 330 * MB; // fp32
+const EXPECTED_BYTES = 88 * MB; // q8 model + voices, as measured
+/** No byte has arrived for this long while downloading: give up (the Guide carries on in text) instead of hanging forever. */
+const STALL_MS = 45_000;
+/** Initialising the model and the first synthesis normally take a few seconds. */
+const START_TIMEOUT_MS = 60_000;
 const publish = (patch: Partial<VoiceProgress>) => {
-  progress = { ...progress, ...patch }; // a new object each time: useSyncExternalStore compares by identity
+  progress = { ...progress, ...patch, updatedAt: Date.now() }; // a new object each time: useSyncExternalStore compares by identity
   listeners.forEach((l) => l());
 };
 const setState = (next: SpeechEngineState) => {
@@ -79,7 +87,7 @@ export function resetForTests(): void {
   loading = null;
   expectedBytes = 0;
   files.clear();
-  progress = { state: "not_loaded", percent: null, loadedBytes: 0, totalBytes: 0 };
+  progress = fresh();
 }
 let queue: Promise<unknown> = Promise.resolve(); // one synthesis at a time
 
@@ -93,42 +101,30 @@ export function status(): SpeechStatus {
   return { engine: ENGINE, state: now, ready: now === "ready" };
 }
 
+/**
+ * Always the small quantised model on the CPU (WebAssembly): about 88 MB, and it behaves the same in every browser. A WebGPU
+ * build exists but is full precision (~330 MB), needs GPU shader compilation, and Safari stalled on it, so it is not used.
+ */
 async function load(): Promise<TtsLike> {
   const [{ KokoroTTS }, { env }] = await Promise.all([import("kokoro-js"), import("@huggingface/transformers")]);
   if (env.backends.onnx.wasm) env.backends.onnx.wasm.proxy = true; // run the model in a worker
-  const gpu = await hasUsableWebGpu();
-  setExpectedBytes(gpu ? EXPECTED_WEBGPU_BYTES : EXPECTED_WASM_BYTES);
-  const tts = await loadModel(KokoroTTS, gpu);
-  // The first synthesis pays one-off start-up costs: do it now, while the setup screen is showing, not on NOVA's first sentence.
-  try {
-    await tts.generate("Hello.", { voice: VOICE, speed: 1 });
-  } catch {
-    // warming up is best effort: a real request will report any real problem
-  }
+  setExpectedBytes(EXPECTED_BYTES);
+  const tts = await KokoroTTS.from_pretrained(MODEL_ID, { dtype: "q8", device: "wasm", progress_callback: onDownloadEvent });
+  // All bytes are in: the model is now initialised and given its first synthesis (which pays one-off start-up costs), while the
+  // setup screen is still showing, not on NOVA's first sentence.
+  publish({ phase: "starting", percent: Math.max(progress.percent ?? 0, 99) });
+  await withTimeout(tts.generate("Hello.", { voice: VOICE, speed: 1 }), START_TIMEOUT_MS, "Voice start-up timed out");
   return tts;
 }
 
-async function loadModel(KokoroTTS: typeof import("kokoro-js").KokoroTTS, gpu: boolean): Promise<TtsLike> {
-  try {
-    return await KokoroTTS.from_pretrained(MODEL_ID, {
-      ...(gpu ? { dtype: "fp32" as const, device: "webgpu" as const } : { dtype: "q8" as const, device: "wasm" as const }),
-      progress_callback: onDownloadEvent,
-    });
-  } catch (e) {
-    if (!gpu) throw e;
-    files.clear(); // the WebGPU attempt may have fetched a different (larger) set of files
-    return KokoroTTS.from_pretrained(MODEL_ID, { dtype: "q8", device: "wasm", progress_callback: onDownloadEvent }); // WebGPU present but unusable: fall back to CPU
-  }
-}
-
-/** `navigator.gpu` existing is not enough (headless and some drivers expose it without an adapter): only trust a real adapter. */
-async function hasUsableWebGpu(): Promise<boolean> {
-  try {
-    const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown | null> } }).gpu;
-    return !!gpu && !!(await gpu.requestAdapter());
-  } catch {
-    return false;
-  }
+function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    work.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
 }
 
 /** Starts loading the model in the background (idempotent) and returns the current status at once. */
@@ -137,7 +133,19 @@ export function warmUp(): SpeechStatus {
     setState("failed");
   } else if (state === "not_loaded") {
     setState("loading");
-    loading = load().then(
+    publish({ phase: "downloading" });
+    loading = new Promise<TtsLike>((resolve, reject) => {
+      const watchdog = setInterval(() => {
+        if (progress.phase === "downloading" && Date.now() - progress.updatedAt > STALL_MS) {
+          clearInterval(watchdog);
+          reject(new Error("Voice download stalled"));
+        }
+      }, 5000);
+      load().then(
+        (tts) => { clearInterval(watchdog); resolve(tts); },
+        (err) => { clearInterval(watchdog); reject(err); },
+      );
+    }).then(
       (tts) => { setState("ready"); return tts; },
       (err) => { setState("failed"); loading = null; throw err; },
     );

@@ -1,6 +1,10 @@
+import clsx from "clsx";
+import { useEffect, useState } from "react";
 import NovaFace from "./NovaFace";
 import type { VoiceProgress } from "../lib/browserSpeech";
 
+/** How long without any change before saying "still working". */
+export const STILL_WORKING_AFTER_MS = 15_000;
 const mb = (bytes: number) => (bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1);
 
 /**
@@ -18,6 +22,14 @@ export default function GuideVoiceSetup({
   onContinueInText: () => void;
 }) {
   const known = progress.percent !== null;
+  const starting = progress.phase === "starting";
+  // A download that is merely slow keeps moving; one that has stopped for a while gets an honest "still working" note.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 3000);
+    return () => clearInterval(timer);
+  }, []);
+  const quiet = !failed && progress.updatedAt > 0 && now - progress.updatedAt > STILL_WORKING_AFTER_MS;
   return (
     <div data-testid="guide-voice-setup" className="fixed inset-0 z-50 flex items-center justify-center bg-fg/20 p-6 backdrop-blur-[5px]">
       <div
@@ -41,9 +53,11 @@ export default function GuideVoiceSetup({
         ) : (
           <>
             <p className="mt-3 text-sm text-fg-2">
-              {known
-                ? "A one-time update is downloading to your browser so NOVA can speak. It's saved here, so next time this starts instantly."
-                : "Getting NOVA's voice ready. This only takes a moment."}
+              {starting
+                ? "Almost there. NOVA's voice is starting up."
+                : known
+                  ? "A one-time update is downloading to your browser so NOVA can speak. It's saved here, so next time this starts instantly."
+                  : "Getting NOVA's voice ready. This only takes a moment."}
             </p>
             <div
               role="progressbar"
@@ -55,15 +69,22 @@ export default function GuideVoiceSetup({
               className="mt-5 h-2 w-full overflow-hidden rounded-full bg-sunken"
             >
               <div
-                className={known ? "h-full rounded-full bg-corona transition-[width] duration-quick ease-settle" : "h-full w-1/3 animate-pulse rounded-full bg-corona motion-reduce:animate-none"}
+                className={known ? clsx("h-full rounded-full bg-corona transition-[width] duration-quick ease-settle", starting && "animate-pulse motion-reduce:animate-none") : "h-full w-1/3 animate-pulse rounded-full bg-corona motion-reduce:animate-none"}
                 style={known ? { width: `${progress.percent}%` } : undefined}
               />
             </div>
             <p className="mt-2 text-xs text-fg-3" aria-live="polite" data-testid="guide-voice-setup-status">
-              {known
-                ? `${progress.percent}% · ${mb(progress.loadedBytes)} of ${mb(progress.totalBytes)} MB`
-                : "Preparing…"}
+              {starting
+                ? "Starting the voice…"
+                : known
+                  ? `${progress.percent}% · ${mb(progress.loadedBytes)} of ${mb(progress.totalBytes)} MB`
+                  : "Preparing…"}
             </p>
+            {quiet && (
+              <p className="mt-1 text-xs text-fg-3" data-testid="guide-voice-setup-quiet">
+                Still working. This can take longer on a slow connection. If you'd rather not wait, you can skip and use text only.
+              </p>
+            )}
           </>
         )}
 
